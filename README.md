@@ -26,7 +26,7 @@ jobs:
       group: rbxm-publish-dev-latest
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # ...your checks...
       - uses: Gravemind1142/rbxm-delivery/publish@v1
         with:
