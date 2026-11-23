@@ -39,7 +39,7 @@ runs:
       shell: bash
       env:
         RBXM_PUBLISH_BIN: ${{ runner.temp }}/rbxm-publish/bin
-      run: '"$GITHUB_ACTION_PATH/action/install-tools.sh"'
+      run: bash "$GITHUB_ACTION_PATH/action/install-tools.sh"
 
     - name: Build
       id: build
