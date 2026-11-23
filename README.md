@@ -26,3 +26,7 @@ foreman install
 | Lint the plugin | `cd pull && selene src` |
 
 CI (`.github/workflows/ci.yml`) runs the format check, lint, tests and plugin build.
+
+**rbxm-pull has no tests yet, on purpose.** Testing the plugin and `Apply` module needs a real
+Studio/engine runtime. That waits on [studio-run](https://github.com/Gravemind1142/studio-run)
+supporting more platforms and Open Cloud (Luau Execution); until then, rbxm-pull is only linted and built.
