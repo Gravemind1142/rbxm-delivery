@@ -17,6 +17,15 @@ rbxm-publish build [--config rbxm-publish.json] [--out build/] [--commit <sha>] 
 
 Writes `managed.rbxm` and `build.json` to `--out`. Needs `rojo` on `PATH`.
 
+rbxm-publish ships as a standalone executable built with `lute compile`. Pushing a `v*` tag
+runs [`release.yml`](.github/workflows/release.yml), which compiles it for Linux (x86_64,
+aarch64), macOS (aarch64) and Windows (x86_64) and attaches the zips to a GitHub release,
+so it installs with Foreman:
+
+```toml
+rbxm-publish = { github = "<org>/rbxm-delivery", version = "=0.1.0" }
+```
+
 - **Commit and ref** come from `--commit`/`--ref`, else `GITHUB_SHA`/`GITHUB_REF`, else git
   (`HEAD` and its branch). A detached HEAD outside Actions needs `--ref`.
 - **Containers** are resolved through the project's explicit nodes, then on disk under the
@@ -42,11 +51,12 @@ foreman install
 | Test the publisher (from the repo root) | `lute test publish/tests` |
 | Type check the publisher | `lute check publish/src/*.luau` |
 | Run the publisher | `lute publish/src/main.luau build --config rbxm-publish.json --out build/` |
+| Compile the publisher | `lute compile publish/src/main.luau --output build/rbxm-publish` |
 | Build the plugin | `mkdir -p build && rojo build pull --output build/RbxmPull.rbxm` |
 | Format | `stylua publish pull` |
 | Lint the plugin | `cd pull && selene src` |
 
-CI (`.github/workflows/ci.yml`) runs the format check, lint, type check, tests and plugin build.
+CI (`.github/workflows/ci.yml`) runs the format check, lint, type check, tests, a compiled-binary smoke build and the plugin build.
 
 **rbxm-pull has no tests yet, on purpose.** Testing the plugin and `Apply` module needs a real
 Studio/engine runtime. That waits on [studio-run](https://github.com/Gravemind1142/studio-run)

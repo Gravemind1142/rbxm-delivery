@@ -1,0 +1,78 @@
+name: Release
+
+# Pushing a tag like v0.1.0 builds rbxm-publish for each platform with `lute compile` and
+# publishes a GitHub release that Foreman can install from:
+#   rbxm-publish = { github = "<org>/rbxm-delivery", version = "=0.1.0" }
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # Same platforms Lute itself ships for.
+          - { os: ubuntu-latest, target: linux-x86_64, exe: rbxm-publish }
+          - { os: ubuntu-24.04-arm, target: linux-aarch64, exe: rbxm-publish }
+          - { os: macos-latest, target: macos-aarch64, exe: rbxm-publish }
+          - { os: windows-latest, target: windows-x86_64, exe: rbxm-publish.exe }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Roblox/setup-foreman@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compile
+        run: |
+          mkdir -p dist
+          lute compile publish/src/main.luau --output "dist/${{ matrix.exe }}"
+
+      - name: Smoke test
+        run: |
+          "dist/${{ matrix.exe }}" build --config publish/tests/fixtures/game/rbxm-publish.json \
+            --out build/smoke --commit "$GITHUB_SHA" --ref refs/heads/main
+
+      - name: Package
+        run: |
+          name="rbxm-publish-${GITHUB_REF_NAME}-${{ matrix.target }}.zip"
+          # The binary goes at the root of the zip, where Foreman looks for it.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            (cd dist && 7z a "../$name" "${{ matrix.exe }}")
+          else
+            (cd dist && zip "../$name" "${{ matrix.exe }}")
+          fi
+          echo "ZIP=$name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.ZIP }}
+
+  release:
+    needs: compile
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" assets/*.zip \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
