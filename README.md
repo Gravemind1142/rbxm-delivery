@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # ...your checks...
-      - uses: <org>/rbxm-delivery/publish@v1
+      - uses: Gravemind1142/rbxm-delivery/publish@v1
         with:
           channel: dev-latest
           allowed-refs: refs/heads/main
@@ -63,7 +63,7 @@ aarch64), macOS (aarch64) and Windows (x86_64) and attaches the zips to a GitHub
 so it installs with Foreman:
 
 ```toml
-rbxm-publish = { github = "<org>/rbxm-delivery", version = "=0.1.0" }
+rbxm-publish = { github = "Gravemind1142/rbxm-delivery", version = "=0.1.0" }
 ```
 
 - **Commit and ref** come from `--commit`/`--ref`, else `GITHUB_SHA`/`GITHUB_REF`, else git
@@ -131,3 +131,7 @@ which take precedence over `.lute` scripts.
 **rbxm-pull has no tests yet, on purpose.** Testing the plugin and `Apply` module needs a real
 Studio/engine runtime. That waits on [studio-run](https://github.com/Gravemind1142/studio-run)
 supporting more platforms and Open Cloud (Luau Execution); until then, rbxm-pull is only linted and built.
+
+## License
+
+MIT; see [LICENSE](LICENSE).
