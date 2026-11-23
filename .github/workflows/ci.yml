@@ -28,6 +28,41 @@ jobs:
       # Same as running `lute ci` locally; see .lute/ci.luau.
       - run: lute ci
 
+  # rbxm-pull's Jest tests, as an Open Cloud Luau Execution task (no Studio on CI runners).
+  # Skipped with a warning until the ROBLOX_* secrets are set, and on fork PRs, which can't
+  # read them. See "Plugin tests in the cloud" in the README.
+  pull-tests:
+    runs-on: ubuntu-latest
+    # One run at a time: Roblox allows 5 task creations a minute per account.
+    concurrency:
+      group: rbxm-pull-cloud-tests
+      cancel-in-progress: false
+    env:
+      ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+      ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
+      ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_PLACE_ID }}
+    steps:
+      - id: secrets
+        shell: bash
+        run: |
+          if [ -n "$ROBLOX_API_KEY" ] && [ -n "$ROBLOX_UNIVERSE_ID" ] && [ -n "$ROBLOX_PLACE_ID" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Skipping rbxm-pull's cloud tests: set the ROBLOX_API_KEY, ROBLOX_UNIVERSE_ID and ROBLOX_PLACE_ID secrets."
+          fi
+
+      - if: steps.secrets.outputs.present
+        uses: actions/checkout@v5
+
+      - if: steps.secrets.outputs.present
+        uses: Roblox/setup-foreman@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allow-external-github-orgs: true
+
+      - if: steps.secrets.outputs.present
+        run: lute pull-tests --cloud
+
   # Runs the publish action from this checkout, the way consumers use it.
   action:
     strategy:

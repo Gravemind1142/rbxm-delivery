@@ -211,7 +211,10 @@ describe("Apply.apply", function()
 		end)
 	end)
 
-	it("rolls back a failed apply when recording change history", function()
+	-- ChangeHistoryService needs the Plugin capability, which Open Cloud tasks don't have.
+	-- selene: allow(global_usage)
+	local itStudio = if _G.RBXM_PULL_HOST == "cloud" then it.skip else it
+	itStudio("rolls back a failed apply when recording change history", function()
 		local existing = Helpers.folder(sharedParent, "Systems")
 		Helpers.module(existing, "Old", "return 'old'")
 		-- In a real place this is already in history (it's in the place file).

@@ -1,18 +1,15 @@
 {
-  "name": "rbxm-pull-tests",
+  "name": "RbxmPullTests",
   "tree": {
-    "$className": "DataModel",
-    "ReplicatedStorage": {
-      "$className": "ReplicatedStorage",
-      "DevPackages": {
-        "$path": "DevPackages"
-      },
-      "RbxmPull": {
-        "$path": "src"
-      },
-      "Tests": {
-        "$path": "tests"
-      }
+    "$className": "Folder",
+    "DevPackages": {
+      "$path": "DevPackages"
+    },
+    "RbxmPull": {
+      "$path": "src"
+    },
+    "Tests": {
+      "$path": "tests"
     }
   }
 }

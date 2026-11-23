@@ -145,21 +145,40 @@ Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in th
 | `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) |
 | `lute build-cli [--out <path>]` | Compile rbxm-publish to `build/rbxm-publish` |
 | `lute build-plugin` | Build rbxm-pull to `build/RbxmPull.rbxm` |
-| `lute pull-tests [-t <pattern>]` | Run rbxm-pull's Jest tests in Studio (Windows/macOS) |
+| `lute pull-tests [--cloud] [-t <pattern>]` | Run rbxm-pull's Jest tests in Studio (Windows/macOS) or the cloud |
 
 To run the publisher without compiling: `lute publish/src/main.luau build --config rbxm-publish.json`.
 
-CI (`.github/workflows/ci.yml`) just runs `lute ci`.
+CI (`.github/workflows/ci.yml`) runs `lute ci`, and rbxm-pull's tests in the cloud.
 Task names avoid Lute's built-in commands (`test`, `lint`, `check`, `format`, `compile`, ...),
 which take precedence over `.lute` scripts.
 
 **rbxm-pull's tests** use [jest-roblox](https://github.com/Roblox/jest-roblox) (installed with
-Wally into `pull/DevPackages`) and run in a hidden Studio via
+Wally into `pull/DevPackages`) and run through
 [studio-run](https://github.com/Gravemind1142/studio-run): `lute pull-tests [-t <pattern>]`.
-That needs Windows or macOS with Roblox Studio installed and logged in once, so `lute ci`
-runs them there and CI's Linux runner skips them. Running them in CI needs studio-run's
-`--cloud` mode (an Open Cloud key and a test place), which isn't set up yet. The tests also
-apply a real rbxm-publish build of `publish/tests/fixtures/game`.
+Locally that's a hidden Studio, so it needs Windows or macOS with Roblox Studio installed and
+logged in once; `lute ci` runs them there and skips them on Linux. The test tree goes to the
+run as a model (`build/rbxm-pull-tests.rbxm`), not a place file, along with a real
+rbxm-publish build of `publish/tests/fixtures/game` for the round-trip tests.
+
+### Plugin tests in the cloud
+
+`lute pull-tests --cloud` runs the same tests as an
+[Open Cloud Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
+task, on any OS. CI's `pull-tests` job does this, and skips with a warning until these
+repository secrets are set:
+
+| Secret | What it is |
+|---|---|
+| `ROBLOX_API_KEY` | An Open Cloud API key restricted to the test experience, with **Luau execution sessions** read and write, and accepted IP `0.0.0.0/0` (GitHub's runners change IPs) |
+| `ROBLOX_UNIVERSE_ID` | The test experience's universe ID |
+| `ROBLOX_PLACE_ID` | Its place ID |
+
+Use an experience made only for this (an empty Baseplate published from Studio is enough),
+since tasks run against its real cloud data. The tests don't need HTTP enabled. Tasks have no
+Plugin capability, so the change-history rollback test is skipped there and runs only in
+Studio. To run in the cloud locally, set the same three environment variables and run
+`lute pull-tests --cloud`.
 
 ## License
 
