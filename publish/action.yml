@@ -1,0 +1,23 @@
+name: rbxm-publish
+description: Build managed containers with Rojo and publish them to a rolling GitHub release.
+inputs:
+  config:
+    description: Path to rbxm-publish.json
+    default: rbxm-publish.json
+  channel:
+    description: Release tag to publish to, e.g. dev-latest
+    required: true
+  allowed-refs:
+    description: Newline-separated refs allowed to publish, e.g. refs/heads/main
+    required: true
+  github-token:
+    description: Token with contents:write on this repo
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - name: Not implemented
+      shell: bash
+      run: |
+        echo "::error::rbxm-publish action is not implemented yet"
+        exit 1

@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Roblox/setup-foreman@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Format
+        run: stylua --check publish pull
+
+      - name: Lint plugin
+        working-directory: pull
+        run: selene src
+
+      - name: Test publisher
+        run: lute test publish/tests
+
+      - name: Build plugin
+        run: mkdir -p build && rojo build pull --output build/RbxmPull.rbxm
