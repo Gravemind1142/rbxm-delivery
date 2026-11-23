@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Also publish the fixture build to the ci-fixture channel (creates a tag and release in this repo)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,6 +23,65 @@ jobs:
       - uses: Roblox/setup-foreman@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          allow-external-github-orgs: true
 
       # Same as running `lute ci` locally; see .lute/ci.luau.
       - run: lute ci
+
+  # Runs the publish action from this checkout, the way consumers use it.
+  action:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: publish
+        uses: ./publish
+        with:
+          config: publish/tests/fixtures/game/rbxm-publish.json
+          channel: ci-fixture
+          allowed-refs: ${{ github.ref }}
+          release: false
+
+      - name: Check outputs
+        shell: bash
+        run: |
+          test "${{ steps.publish.outputs.commit }}" = "$GITHUB_SHA"
+          test "${#SHA256}" -eq 64
+          test "${{ steps.publish.outputs.published }}" = "false"
+        env:
+          SHA256: ${{ steps.publish.outputs.sha256 }}
+
+  # End-to-end release against the real GitHub API. Manual only: it moves the ci-fixture tag.
+  action-release:
+    if: github.event_name == 'workflow_dispatch' && inputs.release
+    needs: [check, action]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: rbxm-publish-ci-fixture
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: publish
+        uses: ./publish
+        with:
+          config: publish/tests/fixtures/game/rbxm-publish.json
+          channel: ci-fixture
+          allowed-refs: ${{ github.ref }}
+
+      - name: Check the published release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "published=${{ steps.publish.outputs.published }} url=${{ steps.publish.outputs.release-url }}"
+          gh release download ci-fixture --repo "$GITHUB_REPOSITORY" --dir downloaded
+          test "$(sha256sum downloaded/managed.rbxm | cut -d' ' -f1)" = "${{ steps.publish.outputs.sha256 }}"
+          grep -q "\"commit\": \"$GITHUB_SHA\"" downloaded/build.json
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/ci-fixture" --jq .object.sha)" = "$GITHUB_SHA"

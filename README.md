@@ -7,7 +7,47 @@ Rojo builds into Team Create, from GitHub releases. Design: [docs/spec.md](docs/
 | [`publish/`](publish) | **rbxm-publish** | Lute CLI (`src/`) and GitHub Action (`action.yml`) that build `managed.rbxm` + `build.json` and update a release channel. |
 | [`pull/`](pull) | **rbxm-pull** | Studio plugin (Rojo project) and the `Apply` module that pull a build into a place. |
 
-Status: `rbxm-publish build` and `release` work; the Action and rbxm-pull are not implemented yet.
+Status: rbxm-publish (CLI and Action) works; rbxm-pull is not implemented yet.
+
+## GitHub Action
+
+```yaml
+# .github/workflows/main.yml
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only this workflow should have it
+    concurrency:
+      group: rbxm-publish-dev-latest
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      # ...your checks...
+      - uses: <org>/rbxm-delivery/publish@v1
+        with:
+          channel: dev-latest
+          allowed-refs: refs/heads/main
+```
+
+| Input | Default | |
+|---|---|---|
+| `config` | `rbxm-publish.json` | Path to the config |
+| `channel` | (required) | Release tag to publish to |
+| `allowed-refs` | (required) | One per line or comma-separated |
+| `github-token` | `github.token` | Needs `contents: write` |
+| `release` | `true` | `false` only builds, e.g. to check pull requests |
+
+Outputs: `published` (`false` when skipped as older than the channel), `commit`, `sha256`,
+`release-url`.
+
+The action runs rbxm-publish from its own source with the Lute version pinned in this repo.
+It uses the `rojo` already on `PATH` if there is one (so the build matches your toolchain,
+e.g. after `Roblox/setup-foreman`); otherwise it installs the Rojo pinned here.
 
 ## rbxm-publish build
 

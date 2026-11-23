@@ -5,6 +5,7 @@
 local io = require("@std/io")
 local process = require("@std/process")
 
+local actions = require("./actions")
 local args = require("./args")
 local build = require("./build")
 local github = require("./github")
@@ -44,6 +45,8 @@ local ok, failure = pcall(function()
 		print(
 			`built {m.commit} ({m.ref}): {#m.containers} containers, {m.artifact.size} bytes, sha256 {m.artifact.sha256}`
 		)
+		actions.output("commit", m.commit)
+		actions.output("sha256", m.artifact.sha256)
 	else
 		local repo = flag("repo", process.env.GITHUB_REPOSITORY)
 		if repo == nil then
@@ -65,8 +68,12 @@ local ok, failure = pcall(function()
 			client = github.new(repo, token, nil, process.env.GITHUB_API_URL),
 			log = print,
 		})
+		actions.output("published", if result.published then "true" else "false")
 		if result.published then
 			print(`released {result.manifest.commit} to {channel}: {result.releaseUrl}`)
+			actions.output("release-url", result.releaseUrl :: string)
+		else
+			actions.notice(`{channel} not updated: {result.reason}`)
 		end
 	end
 end)

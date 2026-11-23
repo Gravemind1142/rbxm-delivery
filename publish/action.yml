@@ -1,23 +1,68 @@
 name: rbxm-publish
 description: Build managed containers with Rojo and publish them to a rolling GitHub release.
+
 inputs:
   config:
-    description: Path to rbxm-publish.json
+    description: Path to rbxm-publish.json, relative to the workspace.
     default: rbxm-publish.json
   channel:
-    description: Release tag to publish to, e.g. dev-latest
+    description: Release tag to publish to, e.g. dev-latest.
     required: true
   allowed-refs:
-    description: Newline-separated refs allowed to publish, e.g. refs/heads/main
+    description: Refs allowed to publish, one per line (or comma-separated), e.g. refs/heads/main.
     required: true
   github-token:
-    description: Token with contents:write on this repo
+    description: Token with contents:write on the repository.
     default: ${{ github.token }}
+  release:
+    description: Set to false to only build (e.g. to check a pull request builds).
+    default: "true"
+
+outputs:
+  published:
+    description: '"true" if the channel was updated, "false" if skipped (an older build, or release: false).'
+    value: ${{ steps.release.outputs.published || 'false' }}
+  commit:
+    description: The commit that was built.
+    value: ${{ steps.build.outputs.commit }}
+  sha256:
+    description: SHA-256 of managed.rbxm.
+    value: ${{ steps.build.outputs.sha256 }}
+  release-url:
+    description: URL of the channel's release, when published.
+    value: ${{ steps.release.outputs.release-url }}
+
 runs:
   using: composite
   steps:
-    - name: Not implemented
+    - name: Install tools
       shell: bash
+      env:
+        RBXM_PUBLISH_BIN: ${{ runner.temp }}/rbxm-publish/bin
+      run: '"$GITHUB_ACTION_PATH/action/install-tools.sh"'
+
+    - name: Build
+      id: build
+      shell: bash
+      env:
+        INPUT_CONFIG: ${{ inputs.config }}
+        OUT_DIR: ${{ runner.temp }}/rbxm-publish/build
       run: |
-        echo "::error::rbxm-publish action is not implemented yet"
-        exit 1
+        lute "$GITHUB_ACTION_PATH/src/main.luau" build --config "$INPUT_CONFIG" --out "$OUT_DIR"
+
+    - name: Release
+      id: release
+      if: inputs.release == 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_CHANNEL: ${{ inputs.channel }}
+        INPUT_ALLOWED_REFS: ${{ inputs.allowed-refs }}
+        OUT_DIR: ${{ runner.temp }}/rbxm-publish/build
+      run: |
+        args=(release --dir "$OUT_DIR" --channel "$INPUT_CHANNEL")
+        while IFS= read -r ref; do
+          ref="$(echo "$ref" | xargs)"
+          if [ -n "$ref" ]; then args+=(--allowed-ref "$ref"); fi
+        done < <(echo "$INPUT_ALLOWED_REFS" | tr ',' '\n')
+        lute "$GITHUB_ACTION_PATH/src/main.luau" "${args[@]}"
