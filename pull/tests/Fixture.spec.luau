@@ -9,6 +9,7 @@ local afterAll = JestGlobals.afterAll
 local Apply = require(ReplicatedStorage.RbxmPull.Apply)
 local Helpers = require(ReplicatedStorage.Tests.Helpers)
 
+-- selene: allow(global_usage)
 local fixture = _G.RBXM_PULL_FIXTURE
 
 describe("a real rbxm-publish build", function()

@@ -1,5 +1,8 @@
 --!strict
--- lute ci: everything CI checks, in order, stopping at the first failure.
+-- lute ci: everything CI checks, in order, stopping at the first failure. On Windows and
+-- macOS it also runs rbxm-pull's tests in Studio (lute pull-tests); Studio can't run on
+-- Linux, so CI's ubuntu runner skips them.
+local system = require("@std/system")
 local task = require("./_lib/task")
 
 local cli = `build/rbxm-publish{task.exe}`
@@ -24,6 +27,11 @@ local steps: { { string } } = {
 	},
 	{ task.lute, "build-plugin" },
 }
+if system.win32 or system.macos then
+	table.insert(steps, { task.lute, "pull-tests" })
+else
+	print("ci: skipping rbxm-pull's Studio tests (needs Windows or macOS)")
+end
 for _, step in steps do
 	task.must(step)
 end

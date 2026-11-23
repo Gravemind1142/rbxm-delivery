@@ -7,7 +7,7 @@ Rojo builds into Team Create, from GitHub releases. Design: [docs/spec.md](docs/
 | [`publish/`](publish) | **rbxm-publish** | Lute CLI (`src/`) and GitHub Action (`action.yml`) that build `managed.rbxm` + `build.json` and update a release channel. |
 | [`pull/`](pull) | **rbxm-pull** | Studio plugin (Rojo project) and the `Apply` module that pull a build into a place. |
 
-Status: rbxm-publish (CLI and Action) works; rbxm-pull is not implemented yet.
+Status: rbxm-publish (CLI and Action) works; rbxm-pull is at v0.1 (manual Sync now).
 
 ## GitHub Action
 
@@ -101,9 +101,33 @@ The token needs `contents: write`; `--repo` defaults to `GITHUB_REPOSITORY`.
 
 Workflows that publish should still use a `concurrency` group per channel.
 
+## rbxm-pull (Studio plugin)
+
+v0.1: a toolbar button opens a widget showing
+"Dev @ abc1234 · main @ def5678 · synced 2 min ago", with **Sync now**, **Check** and
+**Settings**.
+
+- **Settings:** the repository, channel and allowed ref are shared, stored as attributes
+  on `ServerStorage.RbxmPull` (the marker). Your GitHub token is yours only, kept in plugin
+  settings and never in the place. A public repo works without a token (60 requests/hour).
+- **Sync now:** downloads `managed.rbxm`, checks its SHA-256 against `build.json`, then
+  replaces every container in one undoable step. If anything fails mid-apply, the step is
+  cancelled and Studio restores what was there. It refuses builds from another ref,
+  unknown `build.json` schema versions, and places last synced by a newer rbxm-pull. It
+  never applies during a playtest.
+- **HTTP:** Studio asks once to allow `api.github.com` and
+  `release-assets.githubusercontent.com`. The plugin also needs Script Injection.
+
+Build it with `lute build-plugin`, then drop `build/RbxmPull.rbxm` into Studio's plugins
+folder. Auto-apply by a sync owner, the lease and polling are v0.2 (spec §10).
+
+`pull/src/Apply` is self-contained, so a Luau Execution task can require it too:
+`Apply.apply(game, rbxm, manifest, { dryRun = true })`.
+
 ## Development
 
-Tools are pinned in [`foreman.toml`](foreman.toml) (Rojo, Lute nightly, StyLua, Selene):
+Tools are pinned in [`foreman.toml`](foreman.toml) (Rojo, Lute nightly, StyLua, Selene, Wally,
+studio-run):
 
 ```sh
 foreman install
@@ -121,16 +145,21 @@ Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in th
 | `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) |
 | `lute build-cli [--out <path>]` | Compile rbxm-publish to `build/rbxm-publish` |
 | `lute build-plugin` | Build rbxm-pull to `build/RbxmPull.rbxm` |
+| `lute pull-tests [-t <pattern>]` | Run rbxm-pull's Jest tests in Studio (Windows/macOS) |
 
 To run the publisher without compiling: `lute publish/src/main.luau build --config rbxm-publish.json`.
 
-CI (`.github/workflows/ci.yml`) just runs `lute ci`, so a green local run means a green CI run.
+CI (`.github/workflows/ci.yml`) just runs `lute ci`.
 Task names avoid Lute's built-in commands (`test`, `lint`, `check`, `format`, `compile`, ...),
 which take precedence over `.lute` scripts.
 
-**rbxm-pull has no tests yet, on purpose.** Testing the plugin and `Apply` module needs a real
-Studio/engine runtime. That waits on [studio-run](https://github.com/Gravemind1142/studio-run)
-supporting more platforms and Open Cloud (Luau Execution); until then, rbxm-pull is only linted and built.
+**rbxm-pull's tests** use [jest-roblox](https://github.com/Roblox/jest-roblox) (installed with
+Wally into `pull/DevPackages`) and run in a hidden Studio via
+[studio-run](https://github.com/Gravemind1142/studio-run): `lute pull-tests [-t <pattern>]`.
+That needs Windows or macOS with Roblox Studio installed and logged in once, so `lute ci`
+runs them there and CI's Linux runner skips them. Running them in CI needs studio-run's
+`--cloud` mode (an Open Cloud key and a test place), which isn't set up yet. The tests also
+apply a real rbxm-publish build of `publish/tests/fixtures/game`.
 
 ## License
 

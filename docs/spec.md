@@ -1,6 +1,7 @@
 # rbxm-delivery: Rojo builds into Team Create, from GitHub releases
 
-Status: spec, nothing built. Two tools, one repo:
+Status: rbxm-publish built (CLI and Action); rbxm-pull at v0.1 (manual Sync now). Two tools,
+one repo:
 - **rbxm-publish**, the producer (§5): builds the `.rbxm` and publishes it to a channel.
 - **rbxm-pull**, the consumer (§6, §7): the Studio plugin and apply module that pull a
   build into a place. Changes only ever flow this way, never back.
@@ -145,9 +146,13 @@ v1 supports GitHub releases only, behind a small interface (`getManifest`,
   with `If-None-Match`, then the `build.json` asset via
   `GET /repos/{owner}/{repo}/releases/assets/{id}` with `Accept: application/octet-stream`.
 - Artifact: same, for `managed.rbxm`. GitHub answers with a redirect to its release asset
-  CDN. **⚠ verify** the current host (`objects.githubusercontent.com` or
-  `release-assets.githubusercontent.com`) and that `HttpService` follows it without
-  forwarding the token.
+  CDN, `release-assets.githubusercontent.com` (checked 2026-11-23). `HttpService` follows
+  the redirect and returns the binary body intact. It **does** forward `Authorization`
+  across redirects, even to another host, so with a token the CDN receives it too. The CDN
+  accepts that (tested by forwarding a token with `curl --location-trusted`), and it's a
+  GitHub-owned host, so this is acceptable.
+- `HttpService` refuses a `User-Agent` header; it sends its own, which GitHub accepts.
+  `Accept`, `Authorization` and `If-None-Match` can be set.
 
 ### 6.2 Settings
 
@@ -243,17 +248,18 @@ Everything it needs from the last apply is on the marker, so it never needs an e
 
 ### 7.1 Steps
 
-1. Verify the SHA-256 of `rbxm` against `manifest.artifact.sha256`. **⚠ verify** a
-   pure-Luau SHA-256 is fast enough for a few MB in a plugin; otherwise use a cheaper hash
-   in `build.json` alongside SHA-256.
+1. Verify the SHA-256 of `rbxm` against `manifest.artifact.sha256`. A pure-Luau SHA-256
+   hashes 4 MiB in about 1.7 s in Studio, which is fast enough; no second hash is needed.
 2. Deserialize with `SerializationService:DeserializeInstancesAsync`. Check the root has
    exactly the containers the manifest lists.
 3. Resolve every target parent. If any is missing, stop **before changing anything**.
 4. Inside one `ChangeHistoryService` recording (plugin only):
-   - **Destroy** every container the marker's `Containers` lists, and anything at a path
+   - **Remove** every container the marker's `Containers` lists, and anything at a path
      this manifest lists. "Anything at a path" means every child of the parent with that
      name, not just the first, so a duplicate left by a race is cleaned up. This also
-     removes renamed and deleted containers.
+     removes renamed and deleted containers. Inside a recording, remove with
+     `Parent = nil` (as Studio's own Delete does), not `Destroy()`: a cancelled recording
+     restores the former but not the latter. Without a recording, `Destroy()`.
    - **Insert** each new container: rename it to its path's leaf name and parent it there.
    - Write the marker: `Commit`, `SchemaVersion`, `AppliedAt`, `AppliedBy`, `Protocol`
      (§6.6), and `Containers` (this manifest's paths, comma-separated).
@@ -273,7 +279,9 @@ costs:
 
 Any error before step 4 changes nothing. An error inside step 4 cancels the recording
 (`ChangeHistoryService:FinishRecording` with `Cancel`) so Studio rolls the partial change
-back. **⚠ verify** that cancelling restores destroyed containers in Team Create.
+back. Verified locally: cancelling restores containers removed with `Parent = nil` (with
+their contents) and removes anything inserted. `Destroy()`ed instances are **not**
+restored. **⚠ verify** the same holds in Team Create.
 
 ## 8. Security
 
@@ -288,13 +296,15 @@ back. **⚠ verify** that cancelling restores destroyed containers in Team Creat
 
 ## 9. Open questions
 
-1. `HttpService` behaviour: redirect handling, binary bodies returned intact as strings,
-   and whether request headers like `Authorization` and `Accept` can be set from a plugin.
-2. `DeserializeInstancesAsync` round-trips a Rojo-built `.rbxm`: scripts, `Source`,
-   attributes, tags, `RunContext`.
+1. ~~`HttpService` behaviour~~: answered in §6.1, except ETag / `304` handling, which
+   still needs checking against the real API.
+2. `DeserializeInstancesAsync` round-trips a Rojo-built `.rbxm`: verified for script
+   classes and `Source` (rbxm-pull's Fixture test applies a real rbxm-publish build).
+   Attributes, tags and `RunContext` aren't covered by that fixture yet.
 3. Collaborative Editing: what a collaborator sees when a script they have open is
    destroyed, and whether their unsaved drafts block or survive the replace.
-4. Change history: whether a cancelled recording reliably reverts a large apply.
+4. Change history: a cancelled recording reverts an apply locally when removal uses
+   `Parent = nil` (§7.2). Still open: Team Create, and very large applies.
 5. Team Create presence: that `Players` lists every active collaborator with the right
    `UserId` in edit mode, on every collaborator's machine, and how quickly joins and
    leaves show up there.
