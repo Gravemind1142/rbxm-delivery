@@ -296,8 +296,8 @@ restored. **⚠ verify** the same holds in Team Create.
 
 ## 9. Open questions
 
-1. ~~`HttpService` behaviour~~: answered in §6.1, except ETag / `304` handling, which
-   still needs checking against the real API.
+1. ~~`HttpService` behaviour~~: answered in §6.1. `If-None-Match` with the release's ETag
+   gets `304` with an empty body.
 2. `DeserializeInstancesAsync` round-trips a Rojo-built `.rbxm`: verified for script
    classes and `Source` (rbxm-pull's Fixture test applies a real rbxm-publish build).
    Attributes, tags and `RunContext` aren't covered by that fixture yet.
