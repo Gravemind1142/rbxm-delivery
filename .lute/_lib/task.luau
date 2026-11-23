@@ -39,15 +39,17 @@ function task.args(...: string): { string }
 	return args
 end
 
--- Runs a command from the repo root with inherited stdio. Returns whether it succeeded.
-function task.run(command: { string }): boolean
+-- Runs a command with inherited stdio, from the repo root or `dir` (relative to it).
+-- Returns whether it succeeded.
+function task.run(command: { string }, dir: string?): boolean
 	local shown = table.clone(command)
 	if shown[1] == task.lute then
 		shown[1] = "lute"
 	end
-	io.write(`> {table.concat(shown, " ")}\n`)
+	io.write(`> {if dir then `(in {dir}) ` else ""}{table.concat(shown, " ")}\n`)
+	local cwd = if dir then pathlib.format(pathlib.join(task.root, dir)) else task.root
 	local ok, result = pcall(function()
-		return process.run(command, { cwd = task.root, stdio = "inherit" })
+		return process.run(command, { cwd = cwd, stdio = "inherit" })
 	end)
 	if not ok then
 		io.ewrite(`error: couldn't run '{command[1]}' (is it installed? try 'foreman install'): {result}\n`)
@@ -57,8 +59,8 @@ function task.run(command: { string }): boolean
 end
 
 -- Runs a command and exits with failure if it fails.
-function task.must(command: { string })
-	if not task.run(command) then
+function task.must(command: { string }, dir: string?)
+	if not task.run(command, dir) then
 		process.exit(1)
 	end
 end

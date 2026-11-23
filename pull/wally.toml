@@ -1,0 +1,10 @@
+[package]
+name = "gravemind1142/rbxm-pull"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+private = true
+
+[dev-dependencies]
+Jest = "roblox/jest@=3.21.0"
+JestGlobals = "roblox/jest-globals@=3.21.0"

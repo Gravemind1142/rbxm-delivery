@@ -21,3 +21,7 @@ Thumbs.db
 
 # rbxm-publish temporaries (left behind only if a build is killed)
 .rbxm-publish.tmp.*
+
+# Wally packages (pull/wally.lock is committed)
+pull/DevPackages/
+pull/Packages/
