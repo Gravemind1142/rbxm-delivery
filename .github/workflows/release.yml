@@ -34,9 +34,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compile
-        run: |
-          mkdir -p dist
-          lute compile publish/src/main.luau --output "dist/${{ matrix.exe }}"
+        run: lute build-cli --out "dist/${{ matrix.exe }}"
 
       - name: Smoke test
         run: |

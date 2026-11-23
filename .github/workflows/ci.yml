@@ -18,25 +18,5 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Format
-        run: stylua --check publish pull
-
-      - name: Lint plugin
-        working-directory: pull
-        run: selene src
-
-      - name: Type check publisher
-        run: lute check publish/src/*.luau
-
-      - name: Test publisher
-        run: lute test publish/tests
-
-      - name: Compile publisher
-        run: |
-          mkdir -p build
-          lute compile publish/src/main.luau --output build/rbxm-publish
-          ./build/rbxm-publish build --config publish/tests/fixtures/game/rbxm-publish.json \
-            --out build/smoke --commit "$GITHUB_SHA" --ref refs/heads/main
-
-      - name: Build plugin
-        run: mkdir -p build && rojo build pull --output build/RbxmPull.rbxm
+      # Same as running `lute ci` locally; see .lute/ci.luau.
+      - run: lute ci

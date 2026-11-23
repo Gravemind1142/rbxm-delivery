@@ -46,17 +46,24 @@ Tools are pinned in [`foreman.toml`](foreman.toml) (Rojo, Lute nightly, StyLua, 
 foreman install
 ```
 
-| Task | Command |
-|---|---|
-| Test the publisher (from the repo root) | `lute test publish/tests` |
-| Type check the publisher | `lute check publish/src/*.luau` |
-| Run the publisher | `lute publish/src/main.luau build --config rbxm-publish.json --out build/` |
-| Compile the publisher | `lute compile publish/src/main.luau --output build/rbxm-publish` |
-| Build the plugin | `mkdir -p build && rojo build pull --output build/RbxmPull.rbxm` |
-| Format | `stylua publish pull` |
-| Lint the plugin | `cd pull && selene src` |
+Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in the repo
+(`lute run --list` shows them):
 
-CI (`.github/workflows/ci.yml`) runs the format check, lint, type check, tests, a compiled-binary smoke build and the plugin build.
+| Command | What it does |
+|---|---|
+| `lute ci` | Everything below, in order, as CI runs it |
+| `lute fmt [--check]` | Format all Luau with StyLua |
+| `lute lint-plugin` | Lint rbxm-pull with Selene |
+| `lute typecheck` | Type check rbxm-publish and the task scripts |
+| `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) |
+| `lute build-cli [--out <path>]` | Compile rbxm-publish to `build/rbxm-publish` |
+| `lute build-plugin` | Build rbxm-pull to `build/RbxmPull.rbxm` |
+
+To run the publisher without compiling: `lute publish/src/main.luau build --config rbxm-publish.json`.
+
+CI (`.github/workflows/ci.yml`) just runs `lute ci`, so a green local run means a green CI run.
+Task names avoid Lute's built-in commands (`test`, `lint`, `check`, `format`, `compile`, ...),
+which take precedence over `.lute` scripts.
 
 **rbxm-pull has no tests yet, on purpose.** Testing the plugin and `Apply` module needs a real
 Studio/engine runtime. That waits on [studio-run](https://github.com/Gravemind1142/studio-run)
