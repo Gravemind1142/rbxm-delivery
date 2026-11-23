@@ -25,6 +25,9 @@ jobs:
         working-directory: pull
         run: selene src
 
+      - name: Type check publisher
+        run: lute check publish/src/*.luau
+
       - name: Test publisher
         run: lute test publish/tests
 

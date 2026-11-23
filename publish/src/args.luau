@@ -9,7 +9,7 @@ export type Parsed = {
 }
 
 local COMMANDS: { [string]: { [string]: "one" | "many" } } = {
-	build = { config = "one", out = "one" },
+	build = { config = "one", out = "one", commit = "one", ref = "one" },
 	release = { dir = "one", repo = "one", channel = "one", ["allowed-ref"] = "many" },
 }
 

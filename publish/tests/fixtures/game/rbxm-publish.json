@@ -1,0 +1,10 @@
+{
+  "project": "default.project.json",
+  "containers": [
+    "ReplicatedStorage/Systems",
+    "ReplicatedStorage/Libraries",
+    "ReplicatedStorage/Contract",
+    "ServerScriptService/Systems"
+  ],
+  "buildInfoModule": "ReplicatedStorage/Contract/BuildInfo"
+}

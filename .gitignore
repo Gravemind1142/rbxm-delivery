@@ -18,3 +18,6 @@ sourcemap.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# rbxm-publish temporaries (left behind only if a build is killed)
+.rbxm-publish.tmp.*
