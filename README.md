@@ -7,7 +7,7 @@ Rojo builds into Team Create, from GitHub releases. Design: [docs/spec.md](docs/
 | [`publish/`](publish) | **rbxm-publish** | Lute CLI (`src/`) and GitHub Action (`action.yml`) that build `managed.rbxm` + `build.json` and update a release channel. |
 | [`pull/`](pull) | **rbxm-pull** | Studio plugin (Rojo project) and the `Apply` module that pull a build into a place. |
 
-Status: `rbxm-publish build` works; `release`, the Action and rbxm-pull are not implemented yet.
+Status: `rbxm-publish build` and `release` work; the Action and rbxm-pull are not implemented yet.
 
 ## rbxm-publish build
 
@@ -37,6 +37,29 @@ rbxm-publish = { github = "<org>/rbxm-delivery", version = "=0.1.0" }
 - The generated project is written next to your Rojo project as
   `.rbxm-publish.tmp.project.json` for the duration of the build, so relative `$path`s and
   `globIgnorePaths` keep working.
+
+## rbxm-publish release
+
+```sh
+GITHUB_TOKEN=... rbxm-publish release [--dir build/] [--repo owner/name] \
+    --channel dev-latest --allowed-ref refs/heads/main [--allowed-ref ...]
+```
+
+Publishes `managed.rbxm` + `build.json` from `--dir` to the rolling release `--channel`.
+The token needs `contents: write`; `--repo` defaults to `GITHUB_REPOSITORY`.
+
+1. Verifies the build locally (known `schemaVersion`, size and SHA-256 match) and refuses a
+   `ref` that isn't an `--allowed-ref`, all before any network call.
+2. If the channel's tag already points at a newer commit, it **skips** (exit 0): an older
+   workflow run finished late. Unrelated history (a force push) publishes with a warning.
+3. Creates the release if needed (never marked Latest), uploads both files under temporary
+   names, then for each file deletes the old asset and renames the new one into place. A
+   consumer polling mid-publish sees at worst a missing asset or a hash mismatch, both of
+   which it refuses safely. A run interrupted here is cleaned up by the next one.
+4. Updates the release body (commit, ref, build time), then moves the tag to the commit,
+   so the tag always reflects what's published.
+
+Workflows that publish should still use a `concurrency` group per channel.
 
 ## Development
 

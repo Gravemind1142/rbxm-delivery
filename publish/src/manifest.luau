@@ -48,4 +48,49 @@ function manifest.encode(m: Manifest): string
 	}, "\n")
 end
 
+-- Parses and validates build.json. Refuses schema versions this tool doesn't know.
+function manifest.decode(source: string): Manifest
+	local ok, decoded = pcall(json.deserialize, source)
+	local object = if ok then json.asObject(decoded) else nil
+	if object == nil then
+		error("build.json is not a JSON object", 0)
+	end
+	if object.schemaVersion ~= manifest.SCHEMA_VERSION then
+		error(`build.json has schemaVersion {object.schemaVersion}; this rbxm-publish supports only 1`, 0)
+	end
+
+	local function str(value: json.Value, field: string): string
+		if typeof(value) ~= "string" or value == "" then
+			error(`build.json '{field}' must be a non-empty string`, 0)
+		end
+		return value
+	end
+
+	local artifact = json.asObject(object.artifact)
+	if artifact == nil or typeof(artifact.size) ~= "number" then
+		error("build.json 'artifact' must have a numeric 'size' and a 'sha256'", 0)
+	end
+	local sha256 = str(artifact.sha256, "artifact.sha256")
+	if #sha256 ~= 64 or not string.match(sha256, "^%x+$") then
+		error("build.json 'artifact.sha256' must be 64 hex digits", 0)
+	end
+
+	local containers: { string } = {}
+	for i, value in json.asArray(object.containers) or {} do
+		table.insert(containers, str(value, `containers[{i}]`))
+	end
+	if #containers == 0 then
+		error("build.json 'containers' must be a non-empty array", 0)
+	end
+
+	return {
+		schemaVersion = manifest.SCHEMA_VERSION,
+		commit = str(object.commit, "commit"),
+		ref = str(object.ref, "ref"),
+		builtAt = str(object.builtAt, "builtAt"),
+		artifact = { size = artifact.size :: number, sha256 = string.lower(sha256) },
+		containers = containers,
+	}
+end
+
 return manifest

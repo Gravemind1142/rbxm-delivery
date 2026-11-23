@@ -10,6 +10,37 @@ test.case("hex-encodes digests", function(check)
 	check.eq(manifest.hex(b), "00ab0f")
 end)
 
+local VALID = {
+	schemaVersion = 1,
+	commit = string.rep("a", 40),
+	ref = "refs/heads/main",
+	builtAt = "2026-11-22T10:15:00Z",
+	artifact = { size = 123, sha256 = string.rep("A", 64) },
+	containers = { "ReplicatedStorage/Systems" },
+}
+
+test.case("decodes what it encodes", function(check)
+	local decoded = manifest.decode(manifest.encode(VALID))
+	check.eq(decoded.commit, VALID.commit)
+	check.eq(decoded.artifact.size, 123)
+	check.eq(decoded.artifact.sha256, string.rep("a", 64))
+	check.eq(decoded.containers[1], "ReplicatedStorage/Systems")
+end)
+
+test.case("decode refuses unknown schema versions and malformed fields", function(check)
+	local function fails(source: string, needle: string)
+		local ok, err = pcall(manifest.decode, source)
+		check.eq(ok, false)
+		check.eq(string.find(tostring(err), needle, 1, true) ~= nil, true)
+	end
+	local encoded = manifest.encode(VALID)
+	fails(string.gsub(encoded, '"schemaVersion": 1', '"schemaVersion": 2'), "supports only 1")
+	fails(string.gsub(encoded, '"commit": "a+"', '"commit": ""'), "'commit'")
+	fails(string.gsub(encoded, '"sha256": "A+"', '"sha256": "xyz"'), "64 hex digits")
+	fails(string.gsub(encoded, '"ReplicatedStorage/Systems"', ""), "'containers'")
+	fails("[]", "JSON object")
+end)
+
 test.case("encodes valid build.json in a fixed order", function(check)
 	local encoded = manifest.encode({
 		schemaVersion = 1,
