@@ -238,4 +238,72 @@ describe("Apply.apply", function()
 		expect((restored[1] :: any).Old.Source).toBe("return 'old'")
 		expect(ServerScriptService:FindFirstChild("Systems")).toBeNil()
 	end)
+
+	-- 40 folders, each holding 5 nested levels of 25 ModuleScripts: 5,000 scripts.
+	local function fillLarge(folder: Instance, label: string)
+		for f = 1, 40 do
+			local parent: Instance = Instance.new("Folder")
+			parent.Name = `Group{f}`
+			parent.Parent = folder
+			for depth = 1, 5 do
+				for m = 1, 25 do
+					Helpers.module(parent, `M{m}`, `return "{label} {f}.{depth}.{m}"`)
+				end
+				local nested = Instance.new("Folder")
+				nested.Name = "Nested"
+				nested.Parent = parent
+				parent = nested
+			end
+		end
+	end
+
+	itStudio("rolls back a failed apply of a very large build", function()
+		local existing = Helpers.folder(sharedParent, "Systems")
+		fillLarge(existing, "old")
+		local oldCount = #existing:GetDescendants()
+		local oldSample = existing:FindFirstChild("M7", true) :: ModuleScript
+		game:GetService("ChangeHistoryService"):SetWaypoint("test setup")
+
+		local rbxm, manifest = Helpers.build({
+			{
+				path = SHARED,
+				fill = function(folder)
+					fillLarge(folder, "new")
+				end,
+			},
+			{
+				path = SERVER,
+				fill = function(folder)
+					fillLarge(folder, "new")
+				end,
+			},
+		})
+
+		local started = os.clock()
+		local ok, err = pcall(Apply.apply, game, rbxm, manifest, {
+			changeHistory = true,
+			onStep = function(step)
+				if step == "marker" then
+					error("injected failure", 0)
+				end
+			end,
+		})
+		print(`large rollback: {buffer.len(rbxm)} bytes, {string.format("%.2f", os.clock() - started)}s`)
+		expect(ok).toBe(false)
+		expect(tostring(err)).toBe("apply failed and was rolled back: injected failure")
+
+		-- The same old instances are back, all of them, and nothing new is left behind.
+		local restored = Paths.childrenNamed(sharedParent, "Systems")
+		expect(#restored).toBe(1)
+		expect(restored[1]).toBe(existing)
+		expect(#existing:GetDescendants()).toBe(oldCount)
+		expect(oldSample:IsDescendantOf(existing)).toBe(true)
+		for _, descendant in existing:GetDescendants() do
+			if descendant:IsA("ModuleScript") and string.find(descendant.Source, '"new ', 1, true) then
+				error(`new script left behind: {descendant:GetFullName()}`)
+			end
+		end
+		expect(ServerScriptService:FindFirstChild("Systems")).toBeNil()
+		expect(marker()).toBeNil()
+	end)
 end)

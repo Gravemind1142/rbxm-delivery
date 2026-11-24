@@ -216,7 +216,9 @@ Everything it needs from the last apply is on the marker, so it never needs an e
 1. Verify the size and SHA-256 of `rbxm` against `manifest.artifact` (pure-Luau SHA-256;
    about 1.7 s for 4 MiB in Studio).
 2. Deserialize with `SerializationService:DeserializeInstancesAsync`. The root must be
-   `RbxmDeliveryBuild` holding exactly the manifest's containers.
+   `RbxmDeliveryBuild` holding exactly the manifest's containers. A Rojo-built `.rbxm`
+   round-trips script classes, `Source`, `RunContext`, attributes (including `Vector3` and
+   `Color3` values) and tags; a Studio test applies a real rbxm-publish build to check this.
 3. Resolve every target parent. If any is missing, stop **before changing anything**.
 4. Inside the recording, if any:
    - **Remove** every container the marker's `Containers` lists, and everything at a path
@@ -242,7 +244,8 @@ sync discards any Studio edit to it without warning. The costs:
 Any error before step 4 changes nothing. An error inside step 4 cancels the recording
 (`ChangeHistoryService:FinishRecording` with `Cancel`) so Studio rolls the partial change
 back: containers removed with `Parent = nil` come back with their contents, and anything
-inserted is removed. This is tested in Studio; Team Create is not yet verified
+inserted is removed. This is tested in Studio, including a build of 5,000 scripts (rolled
+back in about half a second); Team Create is not yet verified
 ([#6](https://github.com/Gravemind1142/rbxm-delivery/issues/6)).
 
 ## 8. Security
