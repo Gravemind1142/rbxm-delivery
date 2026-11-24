@@ -41,6 +41,39 @@ describe("a real rbxm-publish build", function()
 		expect(server.Source).toBe('print("server systems")\n')
 	end)
 
+	it("keeps RunContext", function()
+		local server = ServerScriptService:FindFirstChild("Systems") :: Script
+		expect(server.RunContext).toBe(Enum.RunContext.Legacy)
+		local worker = server:FindFirstChild("Worker") :: Script
+		expect(worker.ClassName).toBe("Script")
+		expect(worker.RunContext).toBe(Enum.RunContext.Client)
+		expect(worker.Source).toBe('print("client worker")\n')
+	end)
+
+	it("keeps attributes of each type", function()
+		local libraries = ReplicatedStorage:FindFirstChild("Libraries") :: ModuleScript
+		expect(libraries:GetAttribute("Label")).toBe("libraries")
+		expect(libraries:GetAttribute("Count")).toBe(3)
+		expect(libraries:GetAttribute("Enabled")).toBe(true)
+		expect(libraries:GetAttribute("Offset")).toEqual(Vector3.new(1, 2.5, -3))
+		expect(libraries:GetAttribute("Tint")).toEqual(Color3.new(1, 0.5, 0))
+
+		local combat = (ReplicatedStorage:FindFirstChild("Systems") :: Instance):FindFirstChild("Combat") :: Instance
+		expect(combat:GetAttribute("Damage")).toBe(12.5)
+		local contract = ReplicatedStorage:FindFirstChild("Contract") :: Folder
+		expect(contract:GetAttribute("Version")).toBe(2)
+	end)
+
+	it("keeps tags on containers and nested instances", function()
+		local libraries = ReplicatedStorage:FindFirstChild("Libraries") :: Instance
+		expect(libraries:HasTag("RbxmFixture")).toBe(true)
+		expect(libraries:HasTag("Library")).toBe(true)
+		local contract = ReplicatedStorage:FindFirstChild("Contract") :: Instance
+		expect(contract:HasTag("Contract")).toBe(true)
+		local combat = (ReplicatedStorage:FindFirstChild("Systems") :: Instance):FindFirstChild("Combat") :: Instance
+		expect(combat:GetTags()).toEqual({ "RbxmFixture" })
+	end)
+
 	it("includes the generated BuildInfo and not the placeholder", function()
 		local contract = ReplicatedStorage:FindFirstChild("Contract") :: Folder
 		local buildInfos = {}

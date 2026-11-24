@@ -1,1 +1,12 @@
-{ "properties": {} }
+{
+  "properties": {
+    "Tags": ["RbxmFixture", "Library"]
+  },
+  "attributes": {
+    "Label": "libraries",
+    "Count": 3,
+    "Enabled": true,
+    "Offset": { "Vector3": [1, 2.5, -3] },
+    "Tint": { "Color3": [1, 0.5, 0] }
+  }
+}
