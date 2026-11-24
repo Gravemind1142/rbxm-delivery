@@ -15,8 +15,13 @@ local function find(root: Instance, className: string, text: string): any
 	return nil
 end
 
+-- The widget takes its colours from Studio's theme (Enum.StudioStyleGuideColor), which Open
+-- Cloud tasks don't have, so this runs only in Studio.
+-- selene: allow(global_usage)
+local itStudio = if _G.RBXM_PULL_HOST == "cloud" then JestGlobals.it.skip else it
+
 describe("Widget", function()
-	it("mounts, updates and reports settings", function()
+	itStudio("mounts, updates and reports settings", function()
 		local host = Instance.new("Frame")
 		local saved = nil
 		local view = Widget.mount(host :: any, {
