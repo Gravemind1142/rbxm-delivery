@@ -27,6 +27,7 @@ describe("Widget", function()
 		local view = Widget.mount(host :: any, {
 			onCheck = function() end,
 			onSync = function() end,
+			onResync = function() end,
 			onSaveSettings = function(values)
 				saved = values
 			end,
@@ -34,6 +35,7 @@ describe("Widget", function()
 
 		view.setStatus("Dev @ aaaaaaa · main @ bbbbbbb", "Dev is behind.", false)
 		view.setSyncEnabled(false, "Syncing…")
+		view.setResync(true, "Confirm re-sync")
 		view.setCommitUrl("https://github.com/o/r/commit/b")
 		view.setLastResult("Synced bbbbbbb: replaced 1.")
 		view.showSettings(
@@ -44,6 +46,7 @@ describe("Widget", function()
 
 		expect(find(host, "TextLabel", "Dev is behind.")).never.toBeNil()
 		expect(find(host, "TextButton", "Syncing…")).never.toBeNil()
+		expect(find(host, "TextButton", "Confirm re-sync").Visible).toBe(true)
 		expect(find(host, "TextBox", "https://github.com/o/r/commit/b")).never.toBeNil()
 		expect(find(host, "TextLabel", "No token saved")).never.toBeNil()
 

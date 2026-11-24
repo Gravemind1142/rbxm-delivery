@@ -124,6 +124,69 @@ describe("Sync.syncNow", function()
 		expect(source.downloads).toBe(0)
 	end)
 
+	it("re-applies the current build, discarding Studio edits", function()
+		setUp()
+		local rbxm, manifest = Helpers.build({
+			{
+				path = PATH,
+				fill = function(folder)
+					Helpers.module(folder, "Main", "return 1")
+				end,
+			},
+		})
+		local source = fakeSource(rbxm, manifest)
+		Sync.syncNow(game, source, Sync.check(game, source), { changeHistory = false })
+		local edited = ServerScriptService:FindFirstChild("SyncTestSystems") :: Instance
+		(edited:FindFirstChild("Main") :: any).Source = "return 'edited in Studio'"
+		local stray = Instance.new("Folder")
+		stray.Name = "Stray"
+		stray.Parent = edited
+
+		local status = Sync.check(game, source)
+		expect(status.kind).toBe("upToDate")
+		expect(status.canSync).toBe(false)
+		expect(status.canResync).toBe(true)
+		-- Sync now has nothing to do; Re-sync replaces the container.
+		expect(function()
+			Sync.syncNow(game, source, status, { changeHistory = false })
+		end).toThrow("Up to date")
+		local result = Sync.syncNow(game, source, status, { changeHistory = false, resync = true })
+		expect(result).never.toBeNil()
+
+		local fresh = ServerScriptService:FindFirstChild("SyncTestSystems") :: Instance
+		expect(fresh).never.toBe(edited)
+		expect((fresh:FindFirstChild("Main") :: any).Source).toBe("return 1")
+		expect(fresh:FindFirstChild("Stray")).toBeNil()
+		expect(Sync.check(game, source).kind).toBe("upToDate")
+	end)
+
+	it("only re-syncs a place that is up to date", function()
+		setUp()
+		local rbxm, manifest = Helpers.build({ { path = PATH } })
+		local source = fakeSource(rbxm, manifest)
+		local behind = Sync.check(game, source)
+		expect(behind.canResync).never.toBe(true)
+		expect(function()
+			Sync.syncNow(game, source, behind, { resync = true })
+		end).toThrow("use Sync now")
+		expect(source.downloads).toBe(0)
+	end)
+
+	it("won't re-sync over a build someone else applied meanwhile", function()
+		setUp()
+		local rbxm, manifest = Helpers.build({ { path = PATH } })
+		local source = fakeSource(rbxm, manifest)
+		Sync.syncNow(game, source, Sync.check(game, source), { changeHistory = false })
+		local status = Sync.check(game, source)
+		Marker.findOrCreate(game):SetAttribute("Commit", string.rep("e", 40))
+		local before = ServerScriptService:FindFirstChild("SyncTestSystems")
+
+		expect(function()
+			Sync.syncNow(game, source, status, { changeHistory = false, resync = true })
+		end).toThrow("check again")
+		expect(ServerScriptService:FindFirstChild("SyncTestSystems")).toBe(before)
+	end)
+
 	it("refuses a tampered download before touching the place", function()
 		setUp()
 		local rbxm, manifest = Helpers.build({ { path = PATH } })

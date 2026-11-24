@@ -7,12 +7,15 @@ local Widget = {}
 export type Callbacks = {
 	onCheck: () -> (),
 	onSync: () -> (),
+	onResync: () -> (),
 	onSaveSettings: (settings: { repo: string, channel: string, allowedRef: string, token: string? }) -> (),
 }
 
 export type View = {
 	setStatus: (line: string, message: string, isProblem: boolean) -> (),
 	setSyncEnabled: (enabled: boolean, label: string?) -> (),
+	-- Shows the Re-sync button (only when up to date), with an optional label.
+	setResync: (shown: boolean, label: string?) -> (),
 	setCommitUrl: (url: string?) -> (),
 	setLastResult: (text: string) -> (),
 	showSettings: (
@@ -115,9 +118,11 @@ function Widget.mount(gui: DockWidgetPluginGui, callbacks: Callbacks): View
 	row.FillDirection = Enum.FillDirection.Horizontal
 
 	local syncButton = button(buttons, 1, "Sync now", callbacks.onSync)
-	button(buttons, 2, "Check", callbacks.onCheck)
+	local resyncButton = button(buttons, 2, "Re-sync", callbacks.onResync)
+	resyncButton.Visible = false
+	button(buttons, 3, "Check", callbacks.onCheck)
 	local settingsFrame: Frame
-	button(buttons, 3, "Settings", function()
+	button(buttons, 4, "Settings", function()
 		settingsFrame.Visible = not settingsFrame.Visible
 	end)
 
@@ -180,6 +185,10 @@ function Widget.mount(gui: DockWidgetPluginGui, callbacks: Callbacks): View
 			syncButton.AutoButtonColor = enabled
 			syncButton.TextTransparency = if enabled then 0 else 0.5
 			syncButton.Text = `  {text or "Sync now"}  `
+		end,
+		setResync = function(shown, text)
+			resyncButton.Visible = shown
+			resyncButton.Text = `  {text or "Re-sync"}  `
 		end,
 		setCommitUrl = function(url)
 			commitUrl.Text = url or ""

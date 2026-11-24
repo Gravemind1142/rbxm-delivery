@@ -205,6 +205,11 @@ A toolbar button and a small widget:
 - "Dev @ abc123 · main @ def456 · synced 2 min ago" (or "behind by 3 builds" when the
   release body has that).
 - **Sync now**, **Open commit** (copies the GitHub URL), **Settings**.
+- **Re-sync**, shown only when the place is up to date: applies the same build again, so
+  Studio edits to managed code (which §7.1 says git owns) can be discarded without waiting
+  for a new build. It takes a second click to confirm, is one undoable step like any apply,
+  and refuses if the marker's `Commit` changed since the last check (re-applying would roll
+  back someone else's newer sync). The plugin doesn't detect such edits itself.
 - The last apply's result.
 
 ### 6.6 Plugin versions
@@ -311,7 +316,7 @@ restored. **⚠ verify** the same holds in Team Create.
 
 ## 10. Milestones
 
-- **v0.1:** `rbxm-publish build` and `release`; plugin with manual **Sync now** only; whole-container
+- **v0.1:** `rbxm-publish build` and `release`; plugin with manual **Sync now** and **Re-sync** only; whole-container
   replace, including removal of dropped containers; hash check; marker with `Protocol`
   (old plugins can only be kept out if the first version already checks it).
 - **v0.2:** auto-apply by the active owner, lease, ETag polling, toolbar status.

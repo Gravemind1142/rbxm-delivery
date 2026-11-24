@@ -42,6 +42,8 @@ gui.Name = "RbxmPull"
 local status: Sync.Status? = nil
 local busy = false -- a check or sync is in flight
 local syncing = false
+-- Re-sync discards Studio edits to managed code, so it takes a second click to confirm.
+local confirmingResync = false
 local view: Widget.View
 
 local function currentState(): Marker.State?
@@ -67,6 +69,14 @@ local function render()
 		kind == "error" or kind == "refused" or kind == "readOnly"
 	)
 	view.setSyncEnabled(not busy and status ~= nil and status.canSync, if syncing then "Syncing…" else nil)
+	local canResync = status ~= nil and status.canResync == true
+	if not canResync then
+		confirmingResync = false
+	end
+	view.setResync(
+		canResync and (not busy or syncing),
+		if syncing then "Re-syncing…" elseif confirmingResync then "Confirm re-sync" else nil
+	)
 	view.setCommitUrl(
 		if state and state.repo and manifest then `https://github.com/{state.repo}/commit/{manifest.commit}` else nil
 	)
@@ -103,36 +113,60 @@ local function check()
 	end)
 end
 
-local function syncNow()
-	if busy or status == nil or not status.canSync then
-		return
-	end
+local function apply(resync: boolean)
 	if RunService:IsRunning() then
 		view.setLastResult("Stop the playtest first: rbxm-pull never applies during a playtest.")
 		return
 	end
 	busy = true
 	syncing = true
+	confirmingResync = false
 	render()
 	task.spawn(function()
 		local ok, result = pcall(function()
 			local state = currentState() :: Marker.State
 			return Sync.syncNow(game, sourceFor(state), status :: Sync.Status, {
 				appliedBy = StudioService:GetUserId(),
+				resync = resync,
 			})
 		end)
+		local verb = if resync then "Re-sync" else "Sync"
 		if not ok then
-			view.setLastResult(`Sync failed: {result}`)
+			view.setLastResult(`{verb} failed: {result}`)
 		elseif result == nil then
 			view.setLastResult("Already synced by someone else.")
 		else
-			view.setLastResult(Format.result(result))
+			view.setLastResult(`{if resync then "Re-synced. " else ""}{Format.result(result)}`)
 		end
 		busy = false
 		syncing = false
 		status = nil
 		check()
 	end)
+end
+
+local function syncNow()
+	if busy or status == nil or not status.canSync then
+		return
+	end
+	apply(false)
+end
+
+local function resync()
+	if busy or status == nil or not status.canResync then
+		return
+	end
+	if not confirmingResync then
+		confirmingResync = true
+		local manifest = (status.release :: GitHubSource.Release).manifest
+		view.setLastResult(
+			`Re-sync replaces every managed container with build {string.sub(manifest.commit, 1, 7)}, `
+				.. "discarding Studio edits to them. Click Confirm re-sync to go ahead (Ctrl+Z undoes it)."
+		)
+		render()
+		return
+	end
+	apply(true)
 end
 
 local function saveSettings(values: { repo: string, channel: string, allowedRef: string, token: string? })
@@ -170,6 +204,7 @@ end
 view = Widget.mount(gui, {
 	onCheck = check,
 	onSync = syncNow,
+	onResync = resync,
 	onSaveSettings = saveSettings,
 })
 

@@ -104,8 +104,8 @@ Workflows that publish should still use a `concurrency` group per channel.
 ## rbxm-pull (Studio plugin)
 
 v0.1: a toolbar button opens a widget showing
-"Dev @ abc1234 · main @ def5678 · synced 2 min ago", with **Sync now**, **Check** and
-**Settings**.
+"Dev @ abc1234 · main @ def5678 · synced 2 min ago", with **Sync now**, **Re-sync**,
+**Check** and **Settings**.
 
 - **Settings:** the repository, channel and allowed ref are shared, stored as attributes
   on `ServerStorage.RbxmPull` (the marker). Your GitHub token is yours only, kept in plugin
@@ -115,6 +115,9 @@ v0.1: a toolbar button opens a widget showing
   cancelled and Studio restores what was there. It refuses builds from another ref,
   unknown `build.json` schema versions, and places last synced by a newer rbxm-pull. It
   never applies during a playtest.
+- **Re-sync:** shown when the place is up to date. It applies the same build again to undo
+  accidental Studio edits to managed code (git owns it). Click it, then **Confirm re-sync**;
+  Ctrl+Z undoes it like any sync.
 - **HTTP:** Studio asks once to allow `api.github.com` and
   `release-assets.githubusercontent.com`. The plugin also needs Script Injection.
 

@@ -1,5 +1,6 @@
 --!strict
--- Decides what the plugin shows and whether Sync now may run (spec §6.3, §6.6), and runs it.
+-- Decides what the plugin shows and whether Sync now or Re-sync may run (spec §6.3, §6.6),
+-- and runs them.
 -- v0.1: syncing is manual. Auto-apply by the active owner and the lease come in v0.2.
 
 local Apply = require(script.Parent.Apply)
@@ -19,6 +20,8 @@ export type Status = {
 	kind: Kind,
 	message: string,
 	canSync: boolean,
+	-- Up to date, but the build can be applied again to discard Studio edits to managed code.
+	canResync: boolean?,
 	state: Marker.State?,
 	release: GitHub.Release?,
 }
@@ -70,7 +73,14 @@ function Sync.releaseStatus(state: Marker.State, release: GitHub.Release): Statu
 		}
 	end
 	if manifest.commit == state.commit then
-		return { kind = "upToDate", message = "Up to date.", canSync = false, state = state, release = release }
+		return {
+			kind = "upToDate",
+			message = "Up to date.",
+			canSync = false,
+			canResync = true,
+			state = state,
+			release = release,
+		}
 	end
 	return {
 		kind = "behind",
@@ -113,14 +123,19 @@ end
 export type SyncOptions = {
 	appliedBy: number?,
 	changeHistory: boolean?,
+	-- Re-apply the build the place already has (status.canResync), replacing managed
+	-- containers to discard Studio edits to them.
+	resync: boolean?,
 }
 
 -- Downloads, verifies and applies the release `status` describes. Re-checks the marker right
 -- before applying, so a sync someone else finished meanwhile isn't applied twice.
 -- Returns nil if there was nothing to do.
 function Sync.syncNow(dataModel: Instance, source: Source, status: Status, options: SyncOptions?): Apply.Result?
-	if not status.canSync or status.release == nil then
-		error(status.message, 0)
+	local opts = options or {}
+	local allowed = if opts.resync then status.canResync == true else status.canSync
+	if not allowed or status.release == nil then
+		error(if opts.resync and status.canSync then "the place is behind: use Sync now" else status.message, 0)
 	end
 	local release = status.release :: GitHub.Release
 
@@ -133,11 +148,14 @@ function Sync.syncNow(dataModel: Instance, source: Source, status: Status, optio
 	if blocked then
 		error(blocked.message, 0)
 	end
-	if (current :: Marker.State).commit == release.manifest.commit then
+	local applied = (current :: Marker.State).commit == release.manifest.commit
+	if opts.resync and not applied then
+		-- Someone synced another build meanwhile; re-applying this one would roll it back.
+		error("the place changed since the last check; check again", 0)
+	elseif not opts.resync and applied then
 		return nil
 	end
 
-	local opts = options or {}
 	return Apply.apply(dataModel, rbxm, release.manifest, {
 		appliedBy = opts.appliedBy,
 		changeHistory = if opts.changeHistory == nil then true else opts.changeHistory,
