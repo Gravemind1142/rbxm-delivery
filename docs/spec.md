@@ -73,7 +73,8 @@ ServerScriptService). The apply step renames each child to the leaf name of its 
 ```
 
 - `artifact` describes `managed.rbxm` (the name is fixed).
-- `containers` lists every container in the build.
+- `containers` lists every container in the build, each once. No container is inside
+  another (`A/B` and `A/B/C`); consumers refuse a manifest where one is.
 - A consumer **refuses** an unknown `schemaVersion`. Adding optional fields doesn't bump
   it; changing the meaning of a field does.
 
@@ -116,6 +117,12 @@ Action inputs, not config: they describe the publishing workflow, not the build.
   the tag. Assets are uploaded under temporary names and renamed into place, so a
   consumer mid-publish sees at worst a missing asset or a hash mismatch, both of which it
   refuses.
+- `verify` runs the same local checks as `release` without publishing: a known
+  `schemaVersion`, `managed.rbxm` size and SHA-256 matching `artifact`, and, with
+  `--allowed-ref`, the ref. It exits 0 if the build is good and 1 with the reason if not;
+  `--format json` prints `{ schemaVersion, commit, ref, builtAt, size, sha256, containers }`
+  on one line. Pipelines that consume a build outside the plugin (§7.3) run it before
+  uploading anything.
 
 ### 5.3 GitHub Action
 
@@ -197,14 +204,15 @@ The plugin needs HTTP access to `api.github.com` and `release-assets.githubuserc
 
 ## 7. Apply module (part of rbxm-pull)
 
-Plain Luau with no plugin dependencies (`pull/src/Apply`), so a Luau Execution task can
-require it too.
+Plain Luau with no plugin dependencies (`pull/src/Apply`). The plugin requires it, and
+each release also ships it bundled into one script for Luau Execution tasks (§7.3).
 
 ```luau
 Apply.apply(dataModel: DataModel, rbxm: buffer, manifest: Manifest, options: {
     dryRun: boolean?,        -- check and report, change nothing
     changeHistory: boolean?, -- one ChangeHistoryService recording (plugins only)
     appliedBy: number?,      -- user ID for the marker's AppliedBy
+    onStep: ((step: string) -> ())?, -- called as each part of step 4 starts (tests)
 }): Result -- { commit, replaced, added, removed, dryRun }
 ```
 
@@ -223,12 +231,15 @@ Everything it needs from the last apply is on the marker, so it never needs an e
 4. Inside the recording, if any:
    - **Remove** every container the marker's `Containers` lists, and everything at a path
      this manifest lists (every child of the parent with that name, not just the first).
-     This also removes renamed and dropped containers. Inside a recording, removal is
-     `Parent = nil` (as Studio's own Delete does), because a cancelled recording restores
-     those but not `Destroy()`ed instances. Without a recording, `Destroy()`.
+     This also removes renamed and dropped containers. Removal is `Parent = nil` (as
+     Studio's own Delete does), because a cancelled recording restores those but not
+     `Destroy()`ed instances, and the rollback without a recording needs them intact too.
    - **Insert** each new container, renamed to its path's leaf name.
    - Write the marker (§6.2).
-5. Return what was replaced, added and removed.
+   - **Check** the result: the marker's `Commit` is the manifest's, and each container
+     path resolves to exactly the inserted container.
+5. Without a recording, `Destroy()` what was removed. (With one, it stays parented to nil
+   so undo can bring it back.) Return what was replaced, added and removed.
 
 Nothing inside a container is matched or kept; every script is a new instance on every
 apply, so the place holds exactly what the build contains. Git owns managed code: the next
@@ -250,15 +261,94 @@ sync discards any Studio edit to it without warning. The costs:
 
 ### 7.2 Failure
 
-Any error before step 4 changes nothing. An error inside step 4 cancels the recording
-(`ChangeHistoryService:FinishRecording` with `Cancel`) so Studio rolls the partial change
-back: containers removed with `Parent = nil` come back with their contents, and anything
-inserted is removed. This is tested in Studio, including a build of 5,000 scripts (rolled
-back in about half a second), and in Team Create
-([#6](https://github.com/Gravemind1142/rbxm-delivery/issues/6)): every collaborator ends up
-with the original containers, the same instances with their Studio edits, and nothing
-inserted. The removal replicates before the rollback, though, so collaborators with a
-managed script open are still kicked from the script editor.
+`apply` is all or nothing in every host. Any error before step 4 changes nothing. An error
+inside step 4 is rolled back and rethrown as `apply failed and was rolled back: <reason>`:
+
+- **With a recording** (the plugin), the recording is cancelled
+  (`ChangeHistoryService:FinishRecording` with `Cancel`) so Studio rolls the partial change
+  back: containers removed with `Parent = nil` come back with their contents, and anything
+  inserted is removed. This is tested in Studio, including a build of 5,000 scripts (rolled
+  back in about half a second), and in Team Create
+  ([#6](https://github.com/Gravemind1142/rbxm-delivery/issues/6)): every collaborator ends
+  up with the original containers, the same instances with their Studio edits, and nothing
+  inserted. The removal replicates before the rollback, though, so collaborators with a
+  managed script open are still kicked from the script editor.
+- **Without one** (any other host), Apply undoes the change by hand, newest first: it
+  removes what it inserted, puts each removed instance back under its original parent
+  (in reverse order, so nested removals come back correctly), and restores the marker's
+  previous attributes, or removes the marker if it created it. The result is the same as a
+  cancelled recording: the same instances, with their contents, attributes and tags, and
+  in both cases a restored container ends up last among its siblings. Tested in Studio
+  alongside the recording, including the 5,000-script build (about 0.6 s).
+
+If restoring itself fails, Apply keeps restoring what it can and errors with
+`apply failed and couldn't be fully rolled back (<what failed>); don't save this place:
+<reason>`. That can't happen through Apply's own steps; it would take something else
+changing the place mid-apply (such as a parent that refuses children).
+
+### 7.3 Task host: `apply-task.luau`
+
+An Open Cloud [Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
+task runs one script source against a saved place version, so CI can patch a place (for
+example a Stable copy of Dev) with the same code the plugin uses, then save and publish it.
+A task can't require files from a repo, so each release ships `apply-task.luau`: Apply
+bundled into one file with no requires, built by `lute build-apply-task`. (Tasks can
+require ModuleScripts deserialized from a binary input, which is how the cloud tests run,
+but those would have to be parented into the place being saved.)
+
+The file returns one function:
+
+```luau
+return function(ctx: {
+    inputs: { [string]: buffer }, -- "managed.rbxm" and "build.json"
+    args: { [string]: string }?,   -- optional: dryRun = "true"; allowedRef = "refs/heads/main[,...]"
+    log: ((string) -> ())?,        -- defaults to print
+}): {
+    ok: boolean,
+    summary: string,               -- "applied <commit> (<n> containers)", or the reason
+    record: { [string]: any }?,    -- on success
+    rolledBack: boolean?,          -- on failure: whether the place is as it was
+}
+```
+
+It decodes `build.json` (refusing an unknown `schemaVersion`), checks `allowedRef` if given,
+and calls `Apply.apply(game, managed.rbxm, manifest, { dryRun })`. Apply's step 4 checks
+the result. `record` holds `applyVersion`, the same build fields as `rbxm-publish verify
+--format json` (`schemaVersion`, `commit`, `ref`, `builtAt`, `size`, `sha256`,
+`containers`), and `replaced`, `added`, `removed` and `dryRun`, so a pipeline can check
+that the task applied the build it verified. It never saves: the caller saves only when
+`ok` is true. With `ok = false`, `rolledBack = false` means the place was left partly
+changed; never save it.
+
+A pipeline runs it alongside its own patch scripts in one task by wrapping it:
+
+```luau
+--!native
+local ctx = ...
+local applyTask = (function()
+    -- contents of apply-task.luau
+end)()
+local outcome = applyTask({
+    inputs = { ["managed.rbxm"] = ctx.inputs.managed, ["build.json"] = ctx.inputs.manifest },
+    args = { allowedRef = "refs/heads/main" },
+})
+if not outcome.ok then
+    error(outcome.summary)
+end
+-- ...the project's own patch scripts, then save...
+```
+
+`--!native` only applies at the top of a script, so keep it there: SHA-256 is much slower
+without native code. `lute apply-task-e2e` runs exactly this against the fixture build.
+
+Differences from the plugin:
+- No user: the marker's `AppliedBy` is 0.
+- No `ChangeHistoryService`: tasks lack the Plugin capability, so Apply never fetches the
+  service without `changeHistory`, and rolls back by hand (§7.2).
+- A task is limited to 5 minutes, shared with the project's own patch scripts. SHA-256 is
+  about 1.6 s per 4 MiB in Studio, and rollback of 5,000 scripts about 0.6 s.
+- Run `rbxm-publish verify` (§5.2) on the downloaded build before creating the task, to fail
+  before uploading anything.
 
 ## 8. Security
 

@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Weekly: rbxm-pull's engine tests as real Open Cloud tasks (pull requests only run the
+  # mock tests in `lute ci`).
+  schedule:
+    - cron: "17 6 * * 1"
   workflow_dispatch:
     inputs:
       release:
@@ -28,10 +32,12 @@ jobs:
       # Same as running `lute ci` locally; see .lute/ci.luau.
       - run: lute ci
 
-  # rbxm-pull's Jest tests, as an Open Cloud Luau Execution task (no Studio on CI runners).
-  # Skipped with a warning until the ROBLOX_* secrets are set, and on fork PRs, which can't
-  # read them. See "Plugin tests in the cloud" in the README.
+  # rbxm-pull's Jest tests and an end-to-end run of apply-task.luau, as Open Cloud Luau
+  # Execution tasks (no Studio on CI runners). Weekly and on demand only: pull requests run the
+  # mock tests in `lute ci` instead. Skipped with a warning until the ROBLOX_* secrets are set.
+  # See "In the cloud" in CONTRIBUTING.md.
   pull-tests:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # One run at a time: Roblox allows 5 task creations a minute per account.
     concurrency:
@@ -62,6 +68,9 @@ jobs:
 
       - if: steps.secrets.outputs.present
         run: lute pull-tests --cloud
+
+      - if: steps.secrets.outputs.present
+        run: lute apply-task-e2e --cloud
 
   # Runs the publish action from this checkout, the way consumers use it.
   action:

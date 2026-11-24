@@ -28,12 +28,14 @@ Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in th
 | `lute fmt [--check]` | Format all Luau with StyLua |
 | `lute lint-plugin` | Lint rbxm-pull with Selene |
 | `lute typecheck` | Type check rbxm-publish and the task scripts |
-| `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) |
+| `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) and the mock tests of rbxm-pull's Apply |
 | `lute build-cli [--out <path>]` | Compile rbxm-publish to `build/rbxm-publish` |
 | `lute build-plugin` | Build rbxm-pull to `build/RbxmPull.rbxm` |
+| `lute build-apply-task` | Bundle Apply into `build/apply-task.luau` (released) and `build/Apply.luau` |
 | `lute install-plugin` | Build rbxm-pull and copy it into Studio's local plugins folder |
 | `lute uninstall-plugin` | Remove rbxm-pull from Studio's local plugins folder |
 | `lute pull-tests [--cloud] [-t <pattern>]` | Run rbxm-pull's Jest tests in Studio (Windows/macOS) or the cloud |
+| `lute apply-task-e2e [--cloud]` | Run `apply-task.luau` as a consumer would, in Studio or the cloud |
 
 - To run the publisher without compiling: `lute publish/src/main.luau build --config rbxm-publish.json`.
 - `lute install-plugin` copies the plugin into `%LOCALAPPDATA%\Roblox\Plugins` on Windows or
@@ -42,8 +44,9 @@ Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in th
 - Task names avoid Lute's built-in commands (`test`, `lint`, `check`, `format`, `compile`,
   ...), which take precedence over `.lute` scripts.
 
-CI ([`ci.yml`](.github/workflows/ci.yml)) runs `lute ci`, rbxm-pull's tests in the cloud, and
-the publish Action from this checkout on Linux, Windows and macOS.
+CI ([`ci.yml`](.github/workflows/ci.yml)) runs `lute ci` and the publish Action from this
+checkout on Linux, Windows and macOS. rbxm-pull's engine tests run in the cloud weekly and
+on demand (see below), not on pull requests.
 
 ## Plugin tests
 
@@ -53,14 +56,25 @@ Wally into `pull/DevPackages`) and run through
 Locally that's a hidden Studio, so it needs Windows or macOS with Roblox Studio installed and
 logged in once; `lute ci` runs them there and skips them on Linux. The test tree goes to the
 run as a model (`build/rbxm-pull-tests.rbxm`), not a place file, along with a real
-rbxm-publish build of `publish/tests/fixtures/game` for the round-trip tests.
+rbxm-publish build of `publish/tests/fixtures/game` for the round-trip tests and the bundled
+`apply-task.luau`.
+
+### Mock tests
+
+`pull/mock-tests` runs the bundled Apply and `apply-task.luau` under Lute against a small mock
+of the engine (`Roblox.luau`: instances, attributes, and a JSON stand-in for `.rbxm`), so pull
+requests test applying, manual rollback and the task contract on any OS without Studio or
+Open Cloud. They're part of `lute tests`. Behaviour that depends on the real engine
+(deserializing a Rojo build, change history, Team Create) stays in `pull/tests`.
 
 ### In the cloud
 
 `lute pull-tests --cloud` runs the same tests as an
 [Open Cloud Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
-task, on any OS. CI's `pull-tests` job does this, and skips with a warning until these
-repository secrets are set (fork PRs can't read them, so they skip too):
+task, on any OS, and `lute apply-task-e2e --cloud` runs `apply-task.luau` as a real task the
+way a consumer would. CI's `pull-tests` job runs both weekly (Mondays) and when the workflow
+is run by hand, not on pull requests, and skips with a warning until these repository
+secrets are set:
 
 | Secret | What it is |
 |---|---|
@@ -73,14 +87,16 @@ since tasks run against its real cloud data. In its place, turn on
 **ServerScriptService → LoadStringEnabled** before publishing: jest-roblox loads test files
 with `loadstring` when `debug.loadmodule` isn't available, as in cloud tasks. The tests don't
 need HTTP enabled. Tasks have no Plugin capability or Studio theme, so the change-history
-rollback test and the widget test are skipped there and run only in Studio. To run in the
+rollback tests and the widget test are skipped there and run only in Studio. To run in the
 cloud locally, set the same three environment variables and run `lute pull-tests --cloud`.
 
 ## Before you open a pull request
 
-Run `lute ci`. On Linux the plugin tests are skipped locally; CI runs them in the cloud.
+Run `lute ci`. On Linux the plugin's engine tests are skipped locally (the mock tests still
+run); CI runs them in the cloud weekly. If you change Apply, run `lute pull-tests` on Windows
+or macOS, or the CI workflow by hand.
 
-- Add or update tests for behaviour changes (`publish/tests`, `pull/tests`).
+- Add or update tests for behaviour changes (`publish/tests`, `pull/mock-tests`, `pull/tests`).
 - Update the README or spec when you change how something works.
 - Add a line to the **Unreleased** section of [CHANGELOG.md](CHANGELOG.md) for user-facing
   changes.

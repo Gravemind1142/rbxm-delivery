@@ -10,15 +10,18 @@ local args = require("./args")
 local build = require("./build")
 local github = require("./github")
 local release = require("./release")
+local verify = require("./verify")
 local version = require("./version")
 
 local USAGE = [[
 Usage:
   rbxm-publish build   [--config rbxm-publish.json] [--out build/] [--commit <sha>] [--ref <ref>]
   rbxm-publish release [--dir build/] [--repo owner/name] --channel dev-latest --allowed-ref refs/heads/main...
+  rbxm-publish verify  [--dir build/] [--allowed-ref refs/heads/main...] [--format text|json]
   rbxm-publish --version
 
 release needs GITHUB_TOKEN; --repo defaults to GITHUB_REPOSITORY.
+verify checks a build without publishing it, and exits 1 with the reason if it's bad.
 ]]
 
 local argv = { ... }
@@ -58,6 +61,25 @@ local ok, failure = pcall(function()
 			`built {m.commit} ({m.ref}): {#m.containers} containers, {m.artifact.size} bytes, sha256 {m.artifact.sha256}`
 		)
 		actions.output("commit", m.commit)
+		actions.output("sha256", m.artifact.sha256)
+	elseif parsed.command == "verify" then
+		local format = flag("format", "text")
+		if format ~= "text" and format ~= "json" then
+			error(`--format must be 'text' or 'json', not '{format}'`, 0)
+		end
+		local m = verify.run({
+			dir = flag("dir", "build") :: string,
+			allowedRefs = parsed.flags["allowed-ref"],
+		}).manifest
+		if format == "json" then
+			print(verify.summaryJson(m))
+		else
+			print(
+				`ok: {m.commit} ({m.ref}): {#m.containers} containers, {m.artifact.size} bytes, sha256 {m.artifact.sha256}`
+			)
+		end
+		actions.output("commit", m.commit)
+		actions.output("ref", m.ref)
 		actions.output("sha256", m.artifact.sha256)
 	else
 		local repo = flag("repo", process.env.GITHUB_REPOSITORY)

@@ -129,6 +129,19 @@ The token needs `contents: write`; `--repo` defaults to `GITHUB_REPOSITORY`.
 
 Workflows that publish should still use a `concurrency` group per channel.
 
+## rbxm-publish verify
+
+```sh
+rbxm-publish verify [--dir build/] [--allowed-ref refs/heads/main ...] [--format text|json]
+```
+
+Runs the checks from `release` step 1 without publishing anything: a known `build.json`
+`schemaVersion`, `managed.rbxm` size and SHA-256 matching it, and the ref if any
+`--allowed-ref` is given. Exits 0 if the build is good and 1 with the reason if not. With
+`--format json` it prints `{ schemaVersion, commit, ref, builtAt, size, sha256, containers }`
+on one line. Use it in pipelines that consume a build outside the plugin, such as
+[applying it in a Luau Execution task](#applying-a-build-in-ci), before uploading anything.
+
 ## rbxm-pull (Studio plugin)
 
 A toolbar button opens a widget showing
@@ -158,8 +171,25 @@ Install it from a [release](https://github.com/Gravemind1142/rbxm-delivery/relea
 syncing by a designated owner is planned
 ([#1](https://github.com/Gravemind1142/rbxm-delivery/issues/1)).
 
-`pull/src/Apply` is self-contained, so a Luau Execution task can require it too:
-`Apply.apply(game, rbxm, manifest, { dryRun = true })`.
+## Applying a build in CI
+
+To patch a saved place version from CI (for example a Stable copy of Dev) with the same
+code the plugin uses, run `apply-task.luau` from a
+[release](https://github.com/Gravemind1142/rbxm-delivery/releases/latest) in an Open Cloud
+[Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
+task. It's the plugin's Apply bundled into one script, and returns a function:
+
+```luau
+local outcome = applyTask({
+    inputs = { ["managed.rbxm"] = rbxm, ["build.json"] = manifest }, -- buffers
+    args = { allowedRef = "refs/heads/main" }, -- optional; also dryRun = "true"
+})
+-- outcome: { ok, summary, record?, rolledBack? }
+```
+
+The apply is all or nothing: if it fails, the place is as it was (`rolledBack = true`).
+It never saves; save the place only when `ok` is true. Run `rbxm-publish verify` on the
+build first. How to wrap it with your own patch scripts in one task: [spec §7.3](docs/spec.md#73-task-host-apply-tasklua).
 
 ## Contributing
 

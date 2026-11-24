@@ -1,7 +1,8 @@
 -- Runs rbxm-pull's Jest tests, in Studio or as an Open Cloud task. Invoked by `lute pull-tests`:
 --   studio-run run pull/run-tests.luau [--cloud --universe-id <id> --place-id <id>] \
 --     --input tests=<rbxm-pull-tests.rbxm> \
---     [--input managed=<managed.rbxm> --input manifest=<build.json>] [--arg testNamePattern=<p>]
+--     [--input managed=<managed.rbxm> --input manifest=<build.json>] \
+--     [--input applyTask=<apply-task.luau>] [--arg testNamePattern=<p>]
 -- Returns whether the tests passed, which becomes studio-run's exit code.
 --
 -- The test tree (DevPackages, RbxmPull, Tests) comes in as a model rather than a place file,
@@ -40,6 +41,10 @@ if ctx.inputs.managed and ctx.inputs.manifest then
 		rbxm = ctx.inputs.managed,
 		manifest = buffer.tostring(ctx.inputs.manifest),
 	}
+end
+-- The bundled apply-task.luau, for ApplyTask.spec.
+if ctx.inputs.applyTask then
+	_G.RBXM_PULL_APPLY_TASK = buffer.tostring(ctx.inputs.applyTask)
 end
 
 local Jest = require(ReplicatedStorage.DevPackages.Jest)

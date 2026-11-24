@@ -5,6 +5,18 @@ together.
 
 ## Unreleased
 
+- **`rbxm-publish verify`** checks a build directory without publishing it (schema version,
+  size and SHA-256, optionally the ref), with `--format json` for pipelines
+  ([#15](https://github.com/Gravemind1142/rbxm-delivery/issues/15)).
+- **`apply-task.luau`** release asset: Apply bundled into one script that applies a build
+  in an Open Cloud Luau Execution task and reports `{ ok, summary, record, rolledBack }`
+  without saving ([#13](https://github.com/Gravemind1142/rbxm-delivery/issues/13)).
+- Apply is all or nothing in every host: without a ChangeHistoryService recording it now
+  rolls a failed apply back by hand, and it checks the result before finishing
+  ([#14](https://github.com/Gravemind1142/rbxm-delivery/issues/14)).
+- `build.json` with a container inside another container (or listed twice) is refused by
+  rbxm-pull and `rbxm-publish verify`/`release`. rbxm-publish never built one.
+
 ## 0.1.0
 
 First release.

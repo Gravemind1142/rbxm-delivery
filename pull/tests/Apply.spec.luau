@@ -211,34 +211,6 @@ describe("Apply.apply", function()
 		end)
 	end)
 
-	-- ChangeHistoryService needs the Plugin capability, which Open Cloud tasks don't have.
-	-- selene: allow(global_usage)
-	local itStudio = if _G.RBXM_PULL_HOST == "cloud" then it.skip else it
-	itStudio("rolls back a failed apply when recording change history", function()
-		local existing = Helpers.folder(sharedParent, "Systems")
-		Helpers.module(existing, "Old", "return 'old'")
-		-- In a real place this is already in history (it's in the place file).
-		game:GetService("ChangeHistoryService"):SetWaypoint("test setup")
-		local rbxm, manifest = buildBoth()
-
-		local ok, err = pcall(Apply.apply, game, rbxm, manifest, {
-			changeHistory = true,
-			onStep = function(step)
-				if step == "marker" then
-					error("injected failure", 0)
-				end
-			end,
-		})
-		expect(ok).toBe(false)
-		expect(tostring(err)).toBe("apply failed and was rolled back: injected failure")
-
-		-- The removed container is back and nothing new was inserted.
-		local restored = Paths.childrenNamed(sharedParent, "Systems")
-		expect(#restored).toBe(1)
-		expect((restored[1] :: any).Old.Source).toBe("return 'old'")
-		expect(ServerScriptService:FindFirstChild("Systems")).toBeNil()
-	end)
-
 	-- 40 folders, each holding 5 nested levels of 25 ModuleScripts: 5,000 scripts.
 	local function fillLarge(folder: Instance, label: string)
 		for f = 1, 40 do
@@ -257,53 +229,139 @@ describe("Apply.apply", function()
 		end
 	end
 
-	itStudio("rolls back a failed apply of a very large build", function()
-		local existing = Helpers.folder(sharedParent, "Systems")
-		fillLarge(existing, "old")
-		local oldCount = #existing:GetDescendants()
-		local oldSample = existing:FindFirstChild("M7", true) :: ModuleScript
-		game:GetService("ChangeHistoryService"):SetWaypoint("test setup")
-
-		local rbxm, manifest = Helpers.build({
-			{
-				path = SHARED,
-				fill = function(folder)
-					fillLarge(folder, "new")
-				end,
-			},
-			{
-				path = SERVER,
-				fill = function(folder)
-					fillLarge(folder, "new")
-				end,
-			},
-		})
-
-		local started = os.clock()
-		local ok, err = pcall(Apply.apply, game, rbxm, manifest, {
-			changeHistory = true,
+	local function failAtMarker(changeHistory: boolean)
+		return {
+			changeHistory = changeHistory,
 			onStep = function(step)
 				if step == "marker" then
 					error("injected failure", 0)
 				end
 			end,
-		})
-		print(`large rollback: {buffer.len(rbxm)} bytes, {string.format("%.2f", os.clock() - started)}s`)
-		expect(ok).toBe(false)
-		expect(tostring(err)).toBe("apply failed and was rolled back: injected failure")
+		}
+	end
 
-		-- The same old instances are back, all of them, and nothing new is left behind.
-		local restored = Paths.childrenNamed(sharedParent, "Systems")
-		expect(#restored).toBe(1)
-		expect(restored[1]).toBe(existing)
-		expect(#existing:GetDescendants()).toBe(oldCount)
-		expect(oldSample:IsDescendantOf(existing)).toBe(true)
-		for _, descendant in existing:GetDescendants() do
-			if descendant:IsA("ModuleScript") and string.find(descendant.Source, '"new ', 1, true) then
-				error(`new script left behind: {descendant:GetFullName()}`)
+	-- Rollback with a ChangeHistoryService recording (the plugin) and by hand (every other host,
+	-- such as a Luau Execution task). ChangeHistoryService needs the Plugin capability, which
+	-- Open Cloud tasks don't have, so the recording tests only run in Studio.
+	-- selene: allow(global_usage)
+	local inCloud = _G.RBXM_PULL_HOST == "cloud"
+	for _, mode in
+		{ { name = "recording change history", changeHistory = true }, { name = "by hand", changeHistory = false } }
+	do
+		local itMode = if mode.changeHistory and inCloud then it.skip else it
+
+		local function setup()
+			if mode.changeHistory then
+				-- In a real place this is already in history (it's in the place file).
+				game:GetService("ChangeHistoryService"):SetWaypoint("test setup")
 			end
 		end
-		expect(ServerScriptService:FindFirstChild("Systems")).toBeNil()
-		expect(marker()).toBeNil()
+
+		itMode(`rolls back a failed apply {mode.name}`, function()
+			local before = Helpers.folder(sharedParent, "Before")
+			local existing = Helpers.folder(sharedParent, "Systems")
+			local after = Helpers.folder(sharedParent, "After")
+			local old = Helpers.module(existing, "Old", "return 'old'")
+			old:SetAttribute("Edited", Vector3.new(1, 2, 3))
+			old:AddTag("Edited")
+			setup()
+			local rbxm, manifest = buildBoth()
+
+			local ok, err = pcall(Apply.apply, game, rbxm, manifest, failAtMarker(mode.changeHistory))
+			expect(ok).toBe(false)
+			expect(tostring(err)).toBe("apply failed and was rolled back: injected failure")
+
+			-- The same container is back with its contents, and nothing new was inserted.
+			local restored = Paths.childrenNamed(sharedParent, "Systems")
+			expect(#restored).toBe(1)
+			expect(restored[1]).toBe(existing)
+			expect(old.Parent).toBe(existing)
+			expect(old.Source).toBe("return 'old'")
+			expect(old:GetAttribute("Edited")).toBe(Vector3.new(1, 2, 3))
+			expect(old:HasTag("Edited")).toBe(true)
+			expect(ServerScriptService:FindFirstChild("Systems")).toBeNil()
+			expect(marker()).toBeNil()
+			-- Whether the restored container keeps its place among its siblings (spec §7.2).
+			local names = {}
+			for _, child in sharedParent:GetChildren() do
+				table.insert(names, child.Name)
+			end
+			print(`sibling order after rolling back {mode.name}: {table.concat(names, ", ")}`)
+			expect(before.Parent).toBe(sharedParent)
+			expect(after.Parent).toBe(sharedParent)
+		end)
+
+		itMode(`rolls back a failed apply of a very large build {mode.name}`, function()
+			local existing = Helpers.folder(sharedParent, "Systems")
+			fillLarge(existing, "old")
+			local oldCount = #existing:GetDescendants()
+			local oldSample = existing:FindFirstChild("M7", true) :: ModuleScript
+			setup()
+
+			local rbxm, manifest = Helpers.build({
+				{
+					path = SHARED,
+					fill = function(folder)
+						fillLarge(folder, "new")
+					end,
+				},
+				{
+					path = SERVER,
+					fill = function(folder)
+						fillLarge(folder, "new")
+					end,
+				},
+			})
+
+			local started = os.clock()
+			local ok, err = pcall(Apply.apply, game, rbxm, manifest, failAtMarker(mode.changeHistory))
+			print(
+				`large rollback {mode.name}: {buffer.len(rbxm)} bytes, {string.format("%.2f", os.clock() - started)}s`
+			)
+			expect(ok).toBe(false)
+			expect(tostring(err)).toBe("apply failed and was rolled back: injected failure")
+
+			-- The same old instances are back, all of them, and nothing new is left behind.
+			local restored = Paths.childrenNamed(sharedParent, "Systems")
+			expect(#restored).toBe(1)
+			expect(restored[1]).toBe(existing)
+			expect(#existing:GetDescendants()).toBe(oldCount)
+			expect(oldSample:IsDescendantOf(existing)).toBe(true)
+			for _, descendant in existing:GetDescendants() do
+				if descendant:IsA("ModuleScript") and string.find(descendant.Source, '"new ', 1, true) then
+					error(`new script left behind: {descendant:GetFullName()}`)
+				end
+			end
+			expect(ServerScriptService:FindFirstChild("Systems")).toBeNil()
+			expect(marker()).toBeNil()
+		end)
+	end
+
+	it("restores the marker's previous attributes when rolling back by hand", function()
+		local rbxm, manifest = buildBoth()
+		Apply.apply(game, rbxm, manifest, { appliedBy = 7 })
+		local before = marker():GetAttributes()
+
+		local rbxm2, manifest2 = buildBoth(string.rep("b", 40))
+		local ok = pcall(Apply.apply, game, rbxm2, manifest2, {
+			onStep = function(step)
+				if step == "check" then
+					error("injected failure", 0)
+				end
+			end,
+		})
+		expect(ok).toBe(false)
+		expect(marker():GetAttributes()).toEqual(before)
+	end)
+
+	it("destroys what it replaced once an apply without a recording succeeds", function()
+		local existing = Helpers.folder(sharedParent, "Systems")
+		local rbxm, manifest = buildBoth()
+		Apply.apply(game, rbxm, manifest)
+		expect(existing.Parent).toBeNil()
+		-- Destroy() locks Parent.
+		expect(function()
+			existing.Parent = sharedParent
+		end).toThrow()
 	end)
 end)

@@ -26,7 +26,8 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$cli" || { echo "::error::Tag $GITHUB_REF_NAME doesn't match publish/src/version.luau ($cli)"; exit 1; }
           test "$GITHUB_REF_NAME" = "v$plugin" || { echo "::error::Tag $GITHUB_REF_NAME doesn't match pull/wally.toml ($plugin)"; exit 1; }
 
-  # The rbxm-pull Studio plugin, so users can install it without the toolchain.
+  # The rbxm-pull Studio plugin, so users can install it without the toolchain, and
+  # apply-task.luau, Apply bundled into one script for Open Cloud Luau Execution tasks.
   plugin:
     needs: version
     runs-on: ubuntu-latest
@@ -40,10 +41,14 @@ jobs:
 
       - run: lute build-plugin
 
+      - run: lute build-apply-task
+
       - uses: actions/upload-artifact@v4
         with:
           name: plugin
-          path: build/RbxmPull.rbxm
+          path: |
+            build/RbxmPull.rbxm
+            build/apply-task.luau
 
   compile:
     needs: version
@@ -111,5 +116,5 @@ jobs:
         run: |
           # --latest so the rolling channel releases (dev-latest, ci-fixture) never show as the
           # repo's latest release.
-          gh release create "$GITHUB_REF_NAME" assets/*.zip assets/RbxmPull.rbxm \
+          gh release create "$GITHUB_REF_NAME" assets/*.zip assets/RbxmPull.rbxm assets/apply-task.luau \
             --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --latest

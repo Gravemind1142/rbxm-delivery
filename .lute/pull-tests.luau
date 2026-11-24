@@ -70,6 +70,9 @@ task.must({
 	"refs/heads/main",
 })
 
+-- The single-file apply script, as released (ApplyTask.spec).
+task.must({ task.lute, "build-apply-task" })
+
 local command = {
 	"studio-run",
 	"run",
@@ -80,6 +83,8 @@ local command = {
 	"managed=build/pull-fixture/managed.rbxm",
 	"--input",
 	"manifest=build/pull-fixture/build.json",
+	"--input",
+	"applyTask=build/apply-task.luau",
 }
 if cloud then
 	for _, arg in { "--cloud", "--universe-id", universeId :: string, "--place-id", placeId :: string } do

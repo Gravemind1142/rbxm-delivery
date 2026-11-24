@@ -41,6 +41,26 @@ test.case("decode refuses unknown schema versions and malformed fields", functio
 	fails("[]", "JSON object")
 end)
 
+test.case("decode refuses duplicate and overlapping containers", function(check)
+	local function containersFail(containers: { string }, needle: string)
+		local m = table.clone(VALID)
+		m.containers = containers
+		local ok, err = pcall(manifest.decode, manifest.encode(m))
+		check.eq(ok, false)
+		check.eq(string.find(tostring(err), needle, 1, true) ~= nil, true)
+	end
+	containersFail({ "ReplicatedStorage/Systems", "ReplicatedStorage/Systems" }, "twice")
+	containersFail(
+		{ "ReplicatedStorage/Systems/Sub", "ReplicatedStorage/Systems" },
+		"containers 'ReplicatedStorage/Systems' and 'ReplicatedStorage/Systems/Sub' overlap"
+	)
+
+	-- A shared prefix that isn't a parent is fine.
+	local m = table.clone(VALID)
+	m.containers = { "ReplicatedStorage/Systems", "ReplicatedStorage/SystemsExtra" }
+	check.eq(#manifest.decode(manifest.encode(m)).containers, 2)
+end)
+
 test.case("encodes valid build.json in a fixed order", function(check)
 	local encoded = manifest.encode({
 		schemaVersion = 1,
