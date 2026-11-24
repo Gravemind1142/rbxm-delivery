@@ -90,6 +90,17 @@ jobs:
         env:
           SHA256: ${{ steps.publish.outputs.sha256 }}
 
+  # One check for branch protection to require, whatever platforms the matrix above covers.
+  # always() so it reports a failure instead of being skipped (which counts as passing).
+  action-all:
+    name: action (all platforms)
+    if: always()
+    needs: action
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: test "${{ needs.action.result }}" = "success"
+
   # End-to-end release against the real GitHub API. Manual only: it moves the ci-fixture tag.
   action-release:
     if: github.event_name == 'workflow_dispatch' && inputs.release
