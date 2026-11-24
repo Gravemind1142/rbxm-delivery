@@ -233,8 +233,17 @@ Everything it needs from the last apply is on the marker, so it never needs an e
 Nothing inside a container is matched or kept; every script is a new instance on every
 apply, so the place holds exactly what the build contains. Git owns managed code: the next
 sync discards any Studio edit to it without warning. The costs:
-- A collaborator with a managed script open has it closed (or left open on a removed
-  instance) by every sync.
+- A collaborator with a managed script open is kicked from the script editor by every
+  sync (Studio logs "Kicked from Live Scripting Session: Script was deleted"). Reopening
+  the script from the Explorer shows the new source.
+- A collaborator's unsaved draft of a managed script survives in the Drafts window, marked
+  as deleted on the server, with **Restore script** and **Discard edit**. Choose **Discard
+  edit** and make the change in git. **Restore script** puts a copy of the script in
+  Workspace, outside every container, so syncs never remove it, and a restored `Script`
+  runs there alongside the managed one.
+- The sync is one undo step only for the collaborator who ran it. Their Ctrl+Z and Ctrl+Y
+  undo and redo it for everyone through Team Create; other collaborators' history doesn't
+  include it.
 - References to managed instances from outside the containers (an `ObjectValue`, a
   property pointing at a ModuleScript) break on every sync. Levels should reach code
   through tags and attributes, which this doesn't affect.
@@ -245,8 +254,11 @@ Any error before step 4 changes nothing. An error inside step 4 cancels the reco
 (`ChangeHistoryService:FinishRecording` with `Cancel`) so Studio rolls the partial change
 back: containers removed with `Parent = nil` come back with their contents, and anything
 inserted is removed. This is tested in Studio, including a build of 5,000 scripts (rolled
-back in about half a second); Team Create is not yet verified
-([#6](https://github.com/Gravemind1142/rbxm-delivery/issues/6)).
+back in about half a second), and in Team Create
+([#6](https://github.com/Gravemind1142/rbxm-delivery/issues/6)): every collaborator ends up
+with the original containers, the same instances with their Studio edits, and nothing
+inserted. The removal replicates before the rollback, though, so collaborators with a
+managed script open are still kicked from the script editor.
 
 ## 8. Security
 

@@ -146,6 +146,10 @@ A toolbar button opens a widget showing
 - **Re-sync:** shown when the place is up to date. It applies the same build again to undo
   accidental Studio edits to managed code (git owns it). Click it, then **Confirm re-sync**;
   Ctrl+Z undoes it like any sync.
+- **Team Create:** a sync is undoable only by whoever ran it, and it undoes for everyone.
+  Collaborators with a managed script open are kicked from the editor. If they had an
+  unsaved draft, they should choose **Discard edit**: **Restore script** leaves a copy in
+  Workspace that syncs never remove.
 - **HTTP:** Studio asks once to allow `api.github.com` and
   `release-assets.githubusercontent.com`. The plugin also needs Script Injection.
 
