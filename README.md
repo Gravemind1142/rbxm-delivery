@@ -121,8 +121,10 @@ v0.1: a toolbar button opens a widget showing
 - **HTTP:** Studio asks once to allow `api.github.com` and
   `release-assets.githubusercontent.com`. The plugin also needs Script Injection.
 
-Build it with `lute build-plugin`, then drop `build/RbxmPull.rbxm` into Studio's plugins
-folder. Auto-apply by a sync owner, the lease and polling are v0.2 (spec §10).
+Install it with `lute install-plugin` (builds it and copies it into
+`%LOCALAPPDATA%\Roblox\Plugins` on Windows or `~/Documents/Roblox/Plugins` on macOS; set
+`ROBLOX_PLUGINS_DIR` to use another folder), then restart Studio. `lute uninstall-plugin`
+removes it. Auto-apply by a sync owner, the lease and polling are v0.2 (spec §10).
 
 `pull/src/Apply` is self-contained, so a Luau Execution task can require it too:
 `Apply.apply(game, rbxm, manifest, { dryRun = true })`.
@@ -148,6 +150,8 @@ Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in th
 | `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) |
 | `lute build-cli [--out <path>]` | Compile rbxm-publish to `build/rbxm-publish` |
 | `lute build-plugin` | Build rbxm-pull to `build/RbxmPull.rbxm` |
+| `lute install-plugin` | Build rbxm-pull and copy it into Studio's local plugins folder |
+| `lute uninstall-plugin` | Remove rbxm-pull from Studio's local plugins folder |
 | `lute pull-tests [--cloud] [-t <pattern>]` | Run rbxm-pull's Jest tests in Studio (Windows/macOS) or the cloud |
 
 To run the publisher without compiling: `lute publish/src/main.luau build --config rbxm-publish.json`.
