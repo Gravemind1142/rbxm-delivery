@@ -1,13 +1,42 @@
 # rbxm-delivery
 
-Rojo builds into Team Create, from GitHub releases. Design: [docs/spec.md](docs/spec.md).
+Rojo builds into Team Create, from GitHub releases.
+
+Your code lives in git and is built by CI; your team builds the rest of the game in Team
+Create. rbxm-delivery connects the two: CI builds the code-owned parts of the place
+("containers", e.g. `ReplicatedStorage/Systems`) into one `.rbxm` and publishes it to a
+GitHub release, and a Studio plugin pulls that build into the Team Create place. Changes only
+flow one way, from git into Studio. Design: [docs/spec.md](docs/spec.md).
 
 | Folder | Tool | What it is |
 |---|---|---|
 | [`publish/`](publish) | **rbxm-publish** | Lute CLI (`src/`) and GitHub Action (`action.yml`) that build `managed.rbxm` + `build.json` and update a release channel. |
 | [`pull/`](pull) | **rbxm-pull** | Studio plugin (Rojo project) and the `Apply` module that pull a build into a place. |
 
-Status: rbxm-publish (CLI and Action) works; rbxm-pull is at v0.1 (manual Sync now).
+## Quickstart
+
+1. **Add `rbxm-publish.json`** next to your Rojo project, listing the containers git owns:
+
+   ```json
+   {
+     "project": "default.project.json",
+     "containers": ["ReplicatedStorage/Systems", "ServerScriptService/Systems"],
+     "buildInfoModule": "ReplicatedStorage/Systems/BuildInfo"
+   }
+   ```
+
+   - `project`: your existing Rojo project, unchanged.
+   - `containers`: instance paths to build. Each is replaced as a whole in the place, so
+     anything else in Studio is left alone.
+   - `buildInfoModule` (optional): a ModuleScript the build adds, returning
+     `{ commit, ref, builtAt }`, so game code can tell which build it's running.
+
+2. **Publish from CI** with the [GitHub Action](#github-action) on pushes to your main branch.
+3. **Install the plugin**: download `RbxmPull.rbxm` from this repo's
+   [latest release](https://github.com/Gravemind1142/rbxm-delivery/releases/latest) into
+   Studio's plugins folder (**Plugins → Plugins Folder**), then restart Studio.
+4. **In your place**, open rbxm-pull from the toolbar, set the repository, channel and
+   allowed ref under **Settings**, and press **Sync now**.
 
 ## GitHub Action
 
@@ -28,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       # ...your checks...
-      - uses: Gravemind1142/rbxm-delivery/publish@v1
+      - uses: Gravemind1142/rbxm-delivery/publish@v0.1.0
         with:
           channel: dev-latest
           allowed-refs: refs/heads/main
@@ -57,10 +86,9 @@ rbxm-publish build [--config rbxm-publish.json] [--out build/] [--commit <sha>] 
 
 Writes `managed.rbxm` and `build.json` to `--out`. Needs `rojo` on `PATH`.
 
-rbxm-publish ships as a standalone executable built with `lute compile`. Pushing a `v*` tag
-runs [`release.yml`](.github/workflows/release.yml), which compiles it for Linux (x86_64,
-aarch64), macOS (aarch64) and Windows (x86_64) and attaches the zips to a GitHub release,
-so it installs with Foreman:
+Outside the Action, rbxm-publish is a standalone executable for Linux (x86_64, aarch64),
+macOS (aarch64) and Windows (x86_64), attached to each
+[release](https://github.com/Gravemind1142/rbxm-delivery/releases). It installs with Foreman:
 
 ```toml
 rbxm-publish = { github = "Gravemind1142/rbxm-delivery", version = "=0.1.0" }
@@ -103,7 +131,7 @@ Workflows that publish should still use a `concurrency` group per channel.
 
 ## rbxm-pull (Studio plugin)
 
-v0.1: a toolbar button opens a widget showing
+A toolbar button opens a widget showing
 "Dev @ abc1234 · main @ def5678 · synced 2 min ago", with **Sync now**, **Re-sync**,
 **Check** and **Settings**.
 
@@ -121,73 +149,18 @@ v0.1: a toolbar button opens a widget showing
 - **HTTP:** Studio asks once to allow `api.github.com` and
   `release-assets.githubusercontent.com`. The plugin also needs Script Injection.
 
-Install it with `lute install-plugin` (builds it and copies it into
-`%LOCALAPPDATA%\Roblox\Plugins` on Windows or `~/Documents/Roblox/Plugins` on macOS; set
-`ROBLOX_PLUGINS_DIR` to use another folder), then restart Studio. `lute uninstall-plugin`
-removes it. Auto-apply by a sync owner, the lease and polling are v0.2 (spec §10).
+Install it from a [release](https://github.com/Gravemind1142/rbxm-delivery/releases/latest)
+(`RbxmPull.rbxm`, see [Quickstart](#quickstart)). Syncing is on demand for now; automatic
+syncing by a designated owner is planned
+([#1](https://github.com/Gravemind1142/rbxm-delivery/issues/1)).
 
 `pull/src/Apply` is self-contained, so a Luau Execution task can require it too:
 `Apply.apply(game, rbxm, manifest, { dryRun = true })`.
 
-## Development
+## Contributing
 
-Tools are pinned in [`foreman.toml`](foreman.toml) (Rojo, Lute nightly, StyLua, Selene, Wally,
-studio-run):
-
-```sh
-foreman install
-```
-
-Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in the repo
-(`lute run --list` shows them):
-
-| Command | What it does |
-|---|---|
-| `lute ci` | Everything below, in order, as CI runs it |
-| `lute fmt [--check]` | Format all Luau with StyLua |
-| `lute lint-plugin` | Lint rbxm-pull with Selene |
-| `lute typecheck` | Type check rbxm-publish and the task scripts |
-| `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) |
-| `lute build-cli [--out <path>]` | Compile rbxm-publish to `build/rbxm-publish` |
-| `lute build-plugin` | Build rbxm-pull to `build/RbxmPull.rbxm` |
-| `lute install-plugin` | Build rbxm-pull and copy it into Studio's local plugins folder |
-| `lute uninstall-plugin` | Remove rbxm-pull from Studio's local plugins folder |
-| `lute pull-tests [--cloud] [-t <pattern>]` | Run rbxm-pull's Jest tests in Studio (Windows/macOS) or the cloud |
-
-To run the publisher without compiling: `lute publish/src/main.luau build --config rbxm-publish.json`.
-
-CI (`.github/workflows/ci.yml`) runs `lute ci`, and rbxm-pull's tests in the cloud.
-Task names avoid Lute's built-in commands (`test`, `lint`, `check`, `format`, `compile`, ...),
-which take precedence over `.lute` scripts.
-
-**rbxm-pull's tests** use [jest-roblox](https://github.com/Roblox/jest-roblox) (installed with
-Wally into `pull/DevPackages`) and run through
-[studio-run](https://github.com/Gravemind1142/studio-run): `lute pull-tests [-t <pattern>]`.
-Locally that's a hidden Studio, so it needs Windows or macOS with Roblox Studio installed and
-logged in once; `lute ci` runs them there and skips them on Linux. The test tree goes to the
-run as a model (`build/rbxm-pull-tests.rbxm`), not a place file, along with a real
-rbxm-publish build of `publish/tests/fixtures/game` for the round-trip tests.
-
-### Plugin tests in the cloud
-
-`lute pull-tests --cloud` runs the same tests as an
-[Open Cloud Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
-task, on any OS. CI's `pull-tests` job does this, and skips with a warning until these
-repository secrets are set:
-
-| Secret | What it is |
-|---|---|
-| `ROBLOX_API_KEY` | An Open Cloud API key restricted to the test experience, with **Luau execution sessions** read and write, and accepted IP `0.0.0.0/0` (GitHub's runners change IPs) |
-| `ROBLOX_UNIVERSE_ID` | The test experience's universe ID |
-| `ROBLOX_PLACE_ID` | Its place ID |
-
-Use an experience made only for this (an empty Baseplate published from Studio is enough),
-since tasks run against its real cloud data. In its place, turn on
-**ServerScriptService → LoadStringEnabled** before publishing: jest-roblox loads test files with
-`loadstring` when `debug.loadmodule` isn't available, as in cloud tasks. The tests don't need HTTP enabled. Tasks have no
-Plugin capability or Studio theme, so the change-history rollback test and the widget test are
-skipped there and run only in Studio. To run in the cloud locally, set the same three environment variables and run
-`lute pull-tests --cloud`.
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). To report a
+security problem, see [SECURITY.md](SECURITY.md).
 
 ## License
 

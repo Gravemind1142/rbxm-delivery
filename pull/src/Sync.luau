@@ -1,5 +1,5 @@
 --!strict
--- Decides what the plugin shows and whether Sync now or Re-sync may run (spec §6.3, §6.6),
+-- Decides what the plugin shows and whether Sync now or Re-sync may run (spec §6.3, §6.5),
 -- and runs them.
 -- v0.1: syncing is manual. Auto-apply by the active owner and the lease come in v0.2.
 

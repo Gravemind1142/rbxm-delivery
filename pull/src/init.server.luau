@@ -1,6 +1,6 @@
 --!strict
 -- rbxm-pull: Studio plugin that pulls a build from a GitHub release channel and applies it.
--- See docs/spec.md §6. v0.1: manual Sync now; auto-apply, the lease and polling come in v0.2.
+-- See docs/spec.md §6. Syncs on demand (Sync now); auto-apply is planned (issue #1).
 
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local RunService = game:GetService("RunService")

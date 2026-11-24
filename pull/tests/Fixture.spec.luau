@@ -1,5 +1,5 @@
 -- Applies a real rbxm-publish build of publish/tests/fixtures/game, passed in by
--- `lute pull-tests` (spec open question §9.2: does a Rojo-built .rbxm round-trip?).
+-- `lute pull-tests`, to check a Rojo-built .rbxm round-trips through DeserializeInstancesAsync.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local JestGlobals = require(ReplicatedStorage.DevPackages.JestGlobals)

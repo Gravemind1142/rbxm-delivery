@@ -12,7 +12,41 @@ permissions:
   contents: read
 
 jobs:
+  # The tag must match the version in the source, so `rbxm-publish --version` and Foreman agree.
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the tag matches the source version
+        shell: bash
+        run: |
+          cli="$(sed -n 's/^return "\(.*\)"$/\1/p' publish/src/version.luau)"
+          plugin="$(sed -n 's/^version = "\(.*\)"$/\1/p' pull/wally.toml)"
+          echo "tag=$GITHUB_REF_NAME rbxm-publish=$cli rbxm-pull=$plugin"
+          test "$GITHUB_REF_NAME" = "v$cli" || { echo "::error::Tag $GITHUB_REF_NAME doesn't match publish/src/version.luau ($cli)"; exit 1; }
+          test "$GITHUB_REF_NAME" = "v$plugin" || { echo "::error::Tag $GITHUB_REF_NAME doesn't match pull/wally.toml ($plugin)"; exit 1; }
+
+  # The rbxm-pull Studio plugin, so users can install it without the toolchain.
+  plugin:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: Roblox/setup-foreman@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allow-external-github-orgs: true
+
+      - run: lute build-plugin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin
+          path: build/RbxmPull.rbxm
+
   compile:
+    needs: version
     strategy:
       fail-fast: true
       matrix:
@@ -59,7 +93,7 @@ jobs:
           path: ${{ env.ZIP }}
 
   release:
-    needs: compile
+    needs: [compile, plugin]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -73,5 +107,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" assets/*.zip \
-            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          # --latest so the rolling channel releases (dev-latest, ci-fixture) never show as the
+          # repo's latest release.
+          gh release create "$GITHUB_REF_NAME" assets/*.zip assets/RbxmPull.rbxm \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --latest

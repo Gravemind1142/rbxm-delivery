@@ -98,7 +98,7 @@ end
 function Apply.apply(dataModel: Instance, rbxm: buffer, manifest: Manifest, options: Options?): Result
 	local opts: Options = options or {}
 
-	-- Refuse to write a marker a newer plugin owns (spec §6.6).
+	-- Refuse to write a marker a newer plugin owns (spec §6.5).
 	local existingMarker = Marker.find(dataModel)
 	local previous = if existingMarker then Marker.read(existingMarker) else nil
 	if previous and not Marker.canWrite(previous) then

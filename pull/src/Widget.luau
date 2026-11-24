@@ -1,5 +1,5 @@
 --!strict
--- The rbxm-pull dock widget (spec §6.5), built from plain instances and themed with Studio's
+-- The rbxm-pull dock widget (spec §6.4), built from plain instances and themed with Studio's
 -- colors. It only lays things out; init.server.luau decides what it shows.
 
 local Widget = {}

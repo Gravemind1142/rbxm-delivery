@@ -10,17 +10,29 @@ local args = require("./args")
 local build = require("./build")
 local github = require("./github")
 local release = require("./release")
+local version = require("./version")
 
 local USAGE = [[
 Usage:
   rbxm-publish build   [--config rbxm-publish.json] [--out build/] [--commit <sha>] [--ref <ref>]
   rbxm-publish release [--dir build/] [--repo owner/name] --channel dev-latest --allowed-ref refs/heads/main...
+  rbxm-publish --version
 
 release needs GITHUB_TOKEN; --repo defaults to GITHUB_REPOSITORY.
 ]]
 
 local argv = { ... }
 table.remove(argv, 1) -- script name
+
+if argv[1] == "--version" or argv[1] == "-V" then
+	print(`rbxm-publish {version}`)
+	process.exit(0)
+	return
+elseif argv[1] == "--help" or argv[1] == "-h" or argv[1] == "help" then
+	print(`rbxm-publish {version}\n\n{USAGE}`)
+	process.exit(0)
+	return
+end
 
 local parsed, err = args.parse(argv)
 if parsed == nil then

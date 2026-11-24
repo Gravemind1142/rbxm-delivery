@@ -1,6 +1,6 @@
 --!strict
 -- The marker: `ServerStorage.RbxmPull`, a Configuration holding the shared sync settings and
--- what was last applied (spec §3, §6.2). Everything here is covered by PROTOCOL (spec §6.6).
+-- what was last applied (spec §3, §6.2). Everything here is covered by PROTOCOL (spec §6.5).
 
 local Marker = {}
 
@@ -110,7 +110,7 @@ function Marker.read(marker: Configuration): State
 	}
 end
 
--- Whether this plugin may write to a marker in `state` (spec §6.6).
+-- Whether this plugin may write to a marker in `state` (spec §6.5).
 function Marker.canWrite(state: State): boolean
 	return state.protocol <= Marker.PROTOCOL
 end

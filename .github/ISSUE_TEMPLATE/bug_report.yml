@@ -1,0 +1,35 @@
+name: Bug report
+description: Something in rbxm-publish or rbxm-pull doesn't work as documented.
+labels: [bug]
+body:
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which part?
+      options:
+        - rbxm-publish CLI
+        - rbxm-publish GitHub Action
+        - rbxm-pull Studio plugin
+        - Apply module
+        - Docs
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`rbxm-publish --version`, the Action's tag, or the release you installed the plugin from."
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include error messages or the plugin widget's status line. Remove tokens before pasting logs.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Your `rbxm-publish.json` and the relevant part of your Rojo project help a lot.

@@ -1,5 +1,5 @@
 --!strict
--- Text the widget shows (spec §6.5). Pure functions, so they're testable.
+-- Text the widget shows (spec §6.4). Pure functions, so they're testable.
 
 local Apply = require(script.Parent.Apply)
 local Marker = require(script.Parent.Apply.Marker)
