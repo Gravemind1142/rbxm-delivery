@@ -63,10 +63,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: Roblox/setup-foreman@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          allow-external-github-orgs: true
+      # Only Lute and Rojo, at the versions pinned in foreman.toml. `foreman install` would
+      # fail here: the dev-only tools (Selene, Wally, studio-run) have no linux-aarch64 builds.
+      - name: Install Lute and Rojo
+        env:
+          RBXM_PUBLISH_BIN: ${{ runner.temp }}/tools
+        run: bash publish/action/install-tools.sh
 
       - name: Compile
         run: lute build-cli --out "dist/${{ matrix.exe }}"
