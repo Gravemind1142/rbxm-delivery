@@ -11,6 +11,16 @@ local SerializationService = game:GetService("SerializationService")
 
 local ctx = ...
 
+-- jest-roblox loads each test file with debug.loadmodule or, failing that, loadstring.
+-- Cloud tasks have no debug.loadmodule, and loadstring only with LoadStringEnabled.
+if not pcall((debug :: any).loadmodule, Instance.new("ModuleScript")) and not pcall(loadstring, "") then
+	error(
+		"jest-roblox needs loadstring here: enable ServerScriptService.LoadStringEnabled "
+			.. "in the test place and publish it",
+		0
+	)
+end
+
 assert(ctx.inputs.tests, "pass the test model with --input tests=<rbxm-pull-tests.rbxm>")
 for _, root in SerializationService:DeserializeInstancesAsync(ctx.inputs.tests) do
 	for _, child in root:GetChildren() do

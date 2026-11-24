@@ -175,7 +175,9 @@ repository secrets are set:
 | `ROBLOX_PLACE_ID` | Its place ID |
 
 Use an experience made only for this (an empty Baseplate published from Studio is enough),
-since tasks run against its real cloud data. The tests don't need HTTP enabled. Tasks have no
+since tasks run against its real cloud data. In its place, turn on
+**ServerScriptService → LoadStringEnabled** before publishing: jest-roblox loads test files with
+`loadstring` when `debug.loadmodule` isn't available, as in cloud tasks. The tests don't need HTTP enabled. Tasks have no
 Plugin capability, so the change-history rollback test is skipped there and runs only in
 Studio. To run in the cloud locally, set the same three environment variables and run
 `lute pull-tests --cloud`.
