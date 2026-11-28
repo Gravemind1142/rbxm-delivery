@@ -2,7 +2,7 @@
 -- Applies a build to a place (spec §7). Plain Luau with no plugin dependencies, so both the
 -- plugin and a Luau Execution task can require it. This folder is self-contained: its modules
 -- only require each other, by path (`@self/...`), so it is also the Lute package `rbxm-apply`
--- (pull/pkg.luau, spec §7.3) that a project bundles into its own patch script.
+-- (pull/pkg.luau, spec §7.3) that a project uses in its own patch script.
 --
 --   Apply.apply(dataModel, rbxm, manifest, options) -> Result
 --   Apply.record(manifest, result) -> Record   -- what was applied, for a deploy report

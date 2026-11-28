@@ -189,8 +189,8 @@ rbxmApply = {
 },
 ```
 
-Then `lute pkg install --vendor`, require it from your patch script, and bundle the script
-into one file (a task runs one script source), for example with darklua:
+Then `lute pkg install --vendor` and require it from your patch script. How the script
+becomes the one source a task runs is up to you:
 
 ```luau
 local Apply = require("@rbxmApply")
@@ -202,8 +202,7 @@ local record = Apply.record(manifest, result) -- what was applied, for your depl
 The apply is all or nothing: if it errors, the place is as it was unless
 `Apply.rolledBack(err)` says otherwise. It never saves; save the place only when your whole
 patch succeeded. Run `rbxm-publish verify` on the build first.
-[`examples/patch-task`](examples/patch-task/patch.luau) is a complete patch script, and
-[spec §7.3](docs/spec.md#73-in-a-luau-execution-task-the-rbxm-apply-package) has the details.
+[Spec §7.3](docs/spec.md#73-in-a-luau-execution-task-the-rbxm-apply-package) has the details.
 
 ## Contributing
 

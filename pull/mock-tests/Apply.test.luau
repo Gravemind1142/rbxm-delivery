@@ -223,3 +223,42 @@ test.case("its version matches the package's", function(check)
 	local pkg = require("../pkg")
 	check.eq(Apply.VERSION, pkg.package.version)
 end)
+
+test.case("refuses a bad build and changes nothing", function(check)
+	local rbxm, manifest = Helpers.buildBoth()
+	local function refuses(name: string, json_: string, needle: string, bytes: buffer?)
+		local Apply, g = Helpers.apply()
+		local before = Helpers.snapshot(g.game)
+		local err = Helpers.errorOf(function()
+			Apply.apply(g.game, bytes or rbxm, Apply.Manifest.decode(json_), {})
+		end)
+		if string.find(err, needle, 1, true) == nil then
+			error(`{name}: '{err}' doesn't mention '{needle}'`)
+		end
+		check.eq(Apply.rolledBack(err), true)
+		check.eq(Helpers.snapshot(g.game), before)
+	end
+	local function with(changes: { [string]: any }): string
+		local m = table.clone(manifest)
+		for key, value in changes do
+			m[key] = value
+		end
+		return json.serialize(m)
+	end
+
+	refuses("schema", with({ schemaVersion = 2 }), "unknown build.json schemaVersion 2")
+	refuses(
+		"sha256",
+		with({ artifact = { size = manifest.artifact.size, sha256 = string.rep("0", 64) } }),
+		"has sha256"
+	)
+	refuses("size", with({ artifact = { size = 1, sha256 = manifest.artifact.sha256 } }), "bytes but build.json says 1")
+	refuses("json", "{", "not valid JSON")
+	local empty = Roblox.rbxm({})
+	refuses(
+		"not a build",
+		with({ artifact = { size = buffer.len(empty), sha256 = Helpers.hex(empty) } }),
+		"must hold a single Folder named RbxmDeliveryBuild",
+		empty
+	)
+end)

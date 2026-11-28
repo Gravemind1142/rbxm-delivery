@@ -299,10 +299,10 @@ An Open Cloud [Luau Execution](https://create.roblox.com/docs/cloud/reference/fe
 task runs one script source against a saved place version, so CI can patch a place (for
 example a Stable copy of Dev) with the same code the plugin uses, then save and publish it.
 
-rbxm-delivery doesn't ship that script. What a patch does besides applying the build
-(stripping PackageLinks, stamping build info, which refs may ship), in what order, and
-what counts as success is the project's call, so the project writes the script and
-rbxm-delivery ships Apply as a library for it: the Lute package `rbxm-apply`
+rbxm-delivery doesn't ship that script, and has no say in how it's built. What a patch
+does besides applying the build (stripping PackageLinks, stamping build info, which refs
+may ship), in what order, what counts as success, and how it becomes one script source are
+the project's call. rbxm-delivery only ships Apply as a library for it: the Lute package `rbxm-apply`
 (`pull/pkg.luau`, holding only `pull/src/Apply`). A project depends on it from this
 repository, pinned to the release tag that matches its `rbxm-publish`, so the build and the
 code applying it always come from the same release:
@@ -323,17 +323,15 @@ return {
 }
 ```
 
-`lute pkg install --vendor` copies the package into the project's `.lpm/`. A task can't
-require files from a repo, so the project bundles its patch script and the package into
-one file before creating the task, for example with darklua's `luau` require mode and an
-alias pointing at the vendored package:
+`lute pkg install --vendor` copies the package's files into the project's `.lpm/`. From
+there the project gets Apply into its task however it likes, as long as the task's one
+script source can reach it: bundling the patch script and the package into one file, or
+passing Apply as a ModuleScript in a binary input. Apply's modules only require each other
+with `@self` paths, which bundlers that follow the Luau require rules and the engine itself
+both resolve.
 
-```sh
-darklua process deploy/patch.luau build/patch.luau
-```
-
-[`examples/patch-task`](../examples/patch-task) is a patch script written that way, in the
-shape `{ ok, summary, record?, rolledBack? }` a task runner such as place-promote expects:
+A patch script typically looks like this, in whatever shape the project's task runner
+expects:
 
 ```luau
 local Apply = require("@rbxmApply")
@@ -347,9 +345,9 @@ return function(ctx)
 end
 ```
 
-(the example also catches errors and reports `rolledBack = Apply.rolledBack(message)`).
-`lute build-patch-example` bundles it with darklua, the mock tests run the bundle under
-Lute, and `lute apply-e2e` runs it as a real task against the fixture build.
+with errors caught and reported with `Apply.rolledBack(message)`. `lute apply-e2e` loads
+Apply from the plugin model as a ModuleScript and applies the fixture build as a real
+task.
 
 What Apply gives the patch script:
 - **Checks:** `Apply.Manifest.decode` refuses an unknown `schemaVersion` and a malformed
@@ -369,7 +367,7 @@ Differences from the plugin:
 - No `ChangeHistoryService`: tasks lack the Plugin capability, so Apply never fetches the
   service without `changeHistory`, and rolls back by hand (§7.2).
 - Native code: SHA-256 is much slower without it. `--!native` only applies at the top of a
-  task's source, so the task runner, not the bundled script, has to set it.
+  task's source, so the task runner, not the patch script, has to set it.
 - A task is limited to 5 minutes, shared with the project's other steps. SHA-256 is about
   1.6 s per 4 MiB in Studio, and rollback of 5,000 scripts about 0.6 s.
 - Run `rbxm-publish verify` (§5.2) on the build before creating the task, to fail before

@@ -28,14 +28,13 @@ Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in th
 | `lute fmt [--check]` | Format all Luau with StyLua |
 | `lute lint-plugin` | Lint rbxm-pull with Selene |
 | `lute typecheck` | Type check rbxm-publish and the task scripts |
-| `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) and the mock tests of rbxm-pull's Apply and the example patch |
+| `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) and the mock tests of rbxm-pull's Apply |
 | `lute build-cli [--out <path>]` | Compile rbxm-publish to `build/rbxm-publish` |
 | `lute build-plugin` | Build rbxm-pull to `build/RbxmPull.rbxm` |
-| `lute build-patch-example` | Bundle `examples/patch-task` with the `rbxm-apply` package into `build/patch.luau` (darklua) |
 | `lute install-plugin` | Build rbxm-pull and copy it into Studio's local plugins folder |
 | `lute uninstall-plugin` | Remove rbxm-pull from Studio's local plugins folder |
 | `lute pull-tests [--cloud] [-t <pattern>]` | Run rbxm-pull's Jest tests in Studio (Windows/macOS) or the cloud |
-| `lute apply-e2e [--cloud]` | Run the bundled example patch as a real task, in Studio or the cloud |
+| `lute apply-e2e [--cloud]` | Apply the fixture build with the released Apply module as a real task, in Studio or the cloud |
 
 - To run the publisher without compiling: `lute publish/src/main.luau build --config rbxm-publish.json`.
 - `lute install-plugin` copies the plugin into `%LOCALAPPDATA%\Roblox\Plugins` on Windows or
@@ -60,19 +59,18 @@ rbxm-publish build of `publish/tests/fixtures/game` for the round-trip tests.
 
 ### Mock tests
 
-`pull/mock-tests` runs Apply's source and the example patch bundled by darklua
-(`build/patch.luau`) under Lute against a small mock of the engine (`Roblox.luau`:
-instances, attributes, and a JSON stand-in for `.rbxm`), so pull requests test applying,
-manual rollback and a project's patch script on any OS without Studio or Open Cloud.
-They're part of `lute tests`, which bundles the example first. Behaviour that depends on the real engine
+`pull/mock-tests` runs Apply's source under Lute against a small mock of the engine
+(`Roblox.luau`: instances, attributes, and a JSON stand-in for `.rbxm`), so pull requests
+test applying, refusals and manual rollback on any OS without Studio or Open Cloud. They're
+part of `lute tests`. Behaviour that depends on the real engine
 (deserializing a Rojo build, change history, Team Create) stays in `pull/tests`.
 
 ### In the cloud
 
 `lute pull-tests --cloud` runs the same tests as an
 [Open Cloud Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
-task, on any OS, and `lute apply-e2e --cloud` runs the bundled example patch as a real task
-the way a project would. CI's `pull-tests` job runs both weekly (Mondays) and when the workflow
+task, on any OS, and `lute apply-e2e --cloud` applies the fixture build with the released
+Apply module as a real task. CI's `pull-tests` job runs both weekly (Mondays) and when the workflow
 is run by hand, not on pull requests, and skips with a warning until these repository
 secrets are set:
 

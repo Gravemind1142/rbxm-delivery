@@ -1,4 +1,4 @@
--- rbxm-pull's Apply module as a Lute package (spec §7.3), for projects that bundle it into
+-- rbxm-pull's Apply module as a Lute package (spec §7.3), for projects that use it in
 -- their own Luau Execution patch script. Only src/Apply is shipped. This file lives here and
 -- not in src/Apply because Rojo would sync it into the plugin.
 --
