@@ -15,7 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  # Same as running `lute ci` locally; see .lute/ci.luau.
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -25,14 +26,64 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           allow-external-github-orgs: true
 
-      # Same as running `lute ci` locally; see .lute/ci.luau.
       - run: lute ci
+
+  # rbxm-publish's tests and compiled binary on the other platforms releases ship for (the ci
+  # job covers linux-x86_64). Not `lute ci`: on Windows and macOS that runs rbxm-pull's tests in
+  # Studio, which CI runners don't have, and formatting, linting and type checking don't depend
+  # on the platform. Nothing here calls Roblox.
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04-arm, target: linux-aarch64 }
+          - { os: macos-latest, target: macos-aarch64 }
+          - { os: windows-latest, target: windows-x86_64 }
+    name: tests (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      # Only Lute and Rojo: the dev-only tools in foreman.toml have no linux-aarch64 builds.
+      - name: Install Lute and Rojo
+        env:
+          RBXM_PUBLISH_BIN: ${{ runner.temp }}/tools
+        run: bash publish/action/install-tools.sh
+
+      - run: lute tests
+
+      - run: lute build-cli
+
+      - name: Smoke test
+        run: |
+          exe=build/rbxm-publish
+          if [ "$RUNNER_OS" = "Windows" ]; then exe="$exe.exe"; fi
+          "$exe" build --config publish/tests/fixtures/game/rbxm-publish.json \
+            --out build/smoke --commit "$GITHUB_SHA" --ref refs/heads/main
+
+  # The required check: ci, and tests on every platform. always() so it reports a failure
+  # instead of being skipped (which counts as passing).
+  check:
+    if: always()
+    needs: [ci, tests]
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          test "${{ needs.ci.result }}" = "success"
+          test "${{ needs.tests.result }}" = "success"
 
   # rbxm-pull's Jest tests and an end-to-end apply of a real build with the released Apply
   # module, as Open Cloud Luau Execution tasks (no Studio on CI runners), on every CI run.
   # Skipped with a warning when the ROBLOX_* secrets aren't available (not set yet, or a pull
-  # request from a fork). See "In the cloud" in CONTRIBUTING.md.
+  # request from a fork). See "In the cloud" in CONTRIBUTING.md. Waits for check, so a change
+  # that already fails the local tests doesn't spend cloud tasks.
   pull-tests:
+    needs: check
     runs-on: ubuntu-latest
     # One run at a time: Roblox allows 5 task creations a minute per account.
     concurrency:
@@ -72,7 +123,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
