@@ -1,13 +1,30 @@
--- apply-task.luau, bundled as released, against a mocked engine. Run from the repository root.
+-- The example patch script (examples/patch-task), bundled with the rbxm-apply package by
+-- darklua as a project would, against a mocked engine. `lute tests` builds the bundle first
+-- (lute build-patch-example). Run from the repository root.
 
+local fs = require("@std/fs")
 local json = require("@std/json")
+local pathlib = require("@std/path")
+local process = require("@std/process")
 local test = require("@std/test")
 
-local verify = require("../../publish/src/verify")
 local Helpers = require("./Helpers")
 local Roblox = require("./Roblox")
 
 local SHARED, SERVER = Helpers.SHARED, Helpers.SERVER
+local BUNDLE = pathlib.format(pathlib.join(process.cwd(), "build", "patch.luau"))
+
+local source: string? = nil
+
+-- A fresh game with the bundled patch's function loaded into it.
+local function patch(): ((any) -> any, Roblox.Game)
+	if source == nil then
+		assert(fs.exists(BUNDLE), "build/patch.luau is missing; run `lute build-patch-example`")
+		source = fs.readFileToString(BUNDLE)
+	end
+	local g = Roblox.newGame()
+	return Roblox.run(source :: string, "patch", g.game), g
+end
 
 local function inputs(rbxm: buffer, manifestBytes: buffer): { [string]: buffer }
 	return { ["managed.rbxm"] = rbxm, ["build.json"] = manifestBytes }
@@ -17,13 +34,15 @@ local function contains(haystack: string, needle: string): boolean
 	return string.find(haystack, needle, 1, true) ~= nil
 end
 
+local function quiet() end
+
 test.case("applies a build and records it", function(check)
-	local applyTask, g = Helpers.task()
+	local run, g = patch()
 	Helpers.existing(g.game.ReplicatedStorage, "Systems")
 	local rbxm, manifest, manifestBytes = Helpers.buildBoth()
 	local logs = {}
 
-	local outcome = applyTask({
+	local outcome = run({
 		inputs = inputs(rbxm, manifestBytes),
 		args = { allowedRef = "refs/heads/dev, refs/heads/main" },
 		log = function(line: string)
@@ -34,7 +53,6 @@ test.case("applies a build and records it", function(check)
 	check.eq(outcome.summary, `applied {Helpers.COMMIT} (2 containers)`)
 	check.eq(outcome.rolledBack, nil)
 	local record = outcome.record
-	check.eq(record.applyVersion, "test")
 	check.eq(record.commit, Helpers.COMMIT)
 	check.eq(record.sha256, manifest.artifact.sha256)
 	check.eq(record.replaced[1], SHARED)
@@ -44,29 +62,11 @@ test.case("applies a build and records it", function(check)
 	check.eq(contains(logs[1], "applying " .. Helpers.COMMIT), true)
 end)
 
-test.case("records the same build fields as rbxm-publish verify", function(check)
-	local applyTask = Helpers.task()
-	local rbxm, manifest, manifestBytes = Helpers.buildBoth()
-	local record = applyTask({ inputs = inputs(rbxm, manifestBytes), log = function() end }).record
-
-	local summary = json.asObject(json.deserialize(verify.summaryJson(manifest))) :: json.Object
-	for key, value in summary :: { [any]: any } do
-		if typeof(key) ~= "string" then
-			continue -- @std/json's own type tag
-		elseif key == "containers" then
-			check.eq(table.concat(record.containers, ","), table.concat(json.asArray(value) :: { any }, ","))
-		else
-			check.eq(record[key], value)
-		end
-	end
-end)
-
 test.case("changes nothing in a dry run", function(check)
-	local applyTask, g = Helpers.task()
+	local run, g = patch()
 	local before = Helpers.snapshot(g.game)
 	local rbxm, _, manifestBytes = Helpers.buildBoth()
-	local outcome =
-		applyTask({ inputs = inputs(rbxm, manifestBytes), args = { dryRun = "true" }, log = function() end })
+	local outcome = run({ inputs = inputs(rbxm, manifestBytes), args = { dryRun = "true" }, log = quiet })
 	check.eq(outcome.ok, true)
 	check.eq(outcome.summary, `would apply {Helpers.COMMIT} (2 containers)`)
 	check.eq(outcome.record.dryRun, true)
@@ -76,10 +76,10 @@ end)
 test.case("refuses a bad build and changes nothing", function(check)
 	local rbxm, manifest = Helpers.buildBoth()
 	local function refuses(name: string, ctx: any, needle: string)
-		local applyTask, g = Helpers.task()
+		local run, g = patch()
 		local before = Helpers.snapshot(g.game)
-		ctx.log = function() end
-		local outcome = applyTask(ctx)
+		ctx.log = quiet
+		local outcome = run(ctx)
 		check.eq(outcome.ok, false)
 		check.eq(outcome.rolledBack, true)
 		if not contains(outcome.summary, needle) then
@@ -102,11 +102,6 @@ test.case("refuses a bad build and changes nothing", function(check)
 		"has sha256"
 	)
 	refuses(
-		"size",
-		{ inputs = inputs(rbxm, bytes({ artifact = { size = 1, sha256 = manifest.artifact.sha256 } })) },
-		"bytes but build.json says 1"
-	)
-	refuses(
 		"ref",
 		{ inputs = inputs(rbxm, bytes({})), args = { allowedRef = "refs/heads/release" } },
 		"refusing a build of 'refs/heads/main'"
@@ -116,11 +111,11 @@ test.case("refuses a bad build and changes nothing", function(check)
 end)
 
 test.case("reports a failed apply that was rolled back", function(check)
-	local applyTask, g = Helpers.task()
+	local run, g = patch()
 	local old = Helpers.existing(g.game.ReplicatedStorage, "Systems")
 	Roblox.setRejectChildren(g.game.ServerScriptService, true)
 	local rbxm, _, manifestBytes = Helpers.buildBoth()
-	local outcome = applyTask({ inputs = inputs(rbxm, manifestBytes), log = function() end })
+	local outcome = run({ inputs = inputs(rbxm, manifestBytes), log = quiet })
 	check.eq(outcome.ok, false)
 	check.eq(outcome.rolledBack, true)
 	check.eq(contains(outcome.summary, "rolled back"), true)
@@ -128,12 +123,12 @@ test.case("reports a failed apply that was rolled back", function(check)
 end)
 
 test.case("reports a failed apply it couldn't roll back", function(check)
-	local applyTask, g = Helpers.task()
+	local run, g = patch()
 	Helpers.existing(g.game.ReplicatedStorage, "Systems")
 	-- The old container can be removed, but neither the new one nor the old one can go back.
 	Roblox.setRejectChildren(g.game.ReplicatedStorage, true)
 	local rbxm, _, manifestBytes = Helpers.buildBoth()
-	local outcome = applyTask({ inputs = inputs(rbxm, manifestBytes), log = function() end })
+	local outcome = run({ inputs = inputs(rbxm, manifestBytes), log = quiet })
 	check.eq(outcome.ok, false)
 	check.eq(outcome.rolledBack, false)
 	check.eq(contains(outcome.summary, "don't save this place"), true)

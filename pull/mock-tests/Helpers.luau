@@ -1,12 +1,11 @@
 --!strict
--- Builds mocked builds and loads the bundled Apply / apply-task.luau for the mock tests.
+-- Builds mocked builds and loads Apply's source for the mock tests.
 
 local crypto = require("@lute/crypto")
 local json = require("@std/json")
 local process = require("@std/process")
 local pathlib = require("@std/path")
 
-local bundle = require("../../.lute/_lib/bundle")
 local Roblox = require("./Roblox")
 
 local Helpers = {}
@@ -15,26 +14,12 @@ Helpers.COMMIT = string.rep("c", 40)
 Helpers.SHARED = "ReplicatedStorage/Systems"
 Helpers.SERVER = "ServerScriptService/Systems"
 
-local ROOT = pathlib.format(process.cwd())
-local sources: { [string]: string } = {}
+local APPLY = pathlib.format(pathlib.join(process.cwd(), "pull", "src", "Apply"))
 
-local function source(entry: bundle.Entry): string
-	if sources[entry] == nil then
-		sources[entry] = bundle.build(ROOT, entry, "test")
-	end
-	return sources[entry]
-end
-
--- A fresh game with the bundled Apply module loaded into it.
+-- A fresh game with Apply loaded into it from pull/src/Apply.
 function Helpers.apply(): (any, Roblox.Game)
 	local g = Roblox.newGame()
-	return Roblox.run(source("Apply"), "Apply", g.game), g
-end
-
--- A fresh game with apply-task.luau's function loaded into it.
-function Helpers.task(): ((any) -> any, Roblox.Game)
-	local g = Roblox.newGame()
-	return Roblox.run(source("Task"), "apply-task", g.game), g
+	return Roblox.load(APPLY, g.game), g
 end
 
 function Helpers.hex(rbxm: buffer): string

@@ -1,5 +1,5 @@
 --!strict
--- Just enough of the Roblox engine to run the bundled Apply under Lute, so pull requests can
+-- Just enough of the Roblox engine to run Apply's source (pull/src/Apply) under Lute, so pull requests can
 -- test it without Studio or an Open Cloud task. The real engine runs the same code in
 -- pull/tests (Studio locally, and the weekly cloud run).
 --
@@ -11,8 +11,10 @@
 -- managed.rbxm is mocked as JSON: Roblox.rbxm(tree) encodes { ClassName, Name, Properties?,
 -- Attributes?, Children? } and SerializationService:DeserializeInstancesAsync decodes it.
 
+local fs = require("@std/fs")
 local json = require("@std/json")
 local luau = require("@std/luau")
+local pathlib = require("@std/path")
 
 local Roblox = {}
 
@@ -306,10 +308,12 @@ function Roblox.newGame(): Game
 	return { game = game, servicesRequested = requested }
 end
 
--- Runs `source` as a script in `game`, returning what it returns.
-function Roblox.run(source: string, chunkname: string, game: any): any
+-- Runs `source` as a script in `game`, returning what it returns. `require` is the one passed
+-- in, if any.
+function Roblox.run(source: string, chunkname: string, game: any, require_: ((string) -> any)?): any
 	local env = setmetatable({
 		game = game,
+		require = require_,
 		Instance = Instance,
 		DateTime = {
 			now = function()
@@ -322,6 +326,26 @@ function Roblox.run(source: string, chunkname: string, game: any): any
 		},
 	}, { __index = _G })
 	return luau.load(luau.compile(source), chunkname, env)()
+end
+
+-- Loads the module folder `directory` (its init.luau) into `game`, the way Roblox requires a
+-- ModuleScript with children: `@self/Name` is the child module Name.luau. Each module runs
+-- once, in the same mocked engine.
+function Roblox.load(directory: string, game: any): any
+	local loaded: { [string]: any } = {}
+	local function load(name: string): any
+		if loaded[name] == nil then
+			local file = pathlib.format(pathlib.join(directory, `{name}.luau`))
+			local source = fs.readFileToString(file)
+			loaded[name] = Roblox.run(source, `@{name}`, game, function(path: string): any
+				local child = string.match(path, "^@self/(%w+)$")
+				assert(name == "init" and child, `{name}.luau: unsupported require("{path}")`)
+				return load(child :: string)
+			end)
+		end
+		return loaded[name]
+	end
+	return load("init")
 end
 
 Roblox.Instance = Instance

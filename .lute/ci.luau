@@ -26,7 +26,6 @@ local steps: { { string } } = {
 		"refs/heads/main",
 	},
 	{ task.lute, "build-plugin" },
-	{ task.lute, "build-apply-task" },
 }
 if system.win32 or system.macos then
 	table.insert(steps, { task.lute, "pull-tests" })

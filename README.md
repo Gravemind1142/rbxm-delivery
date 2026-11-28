@@ -174,22 +174,36 @@ syncing by a designated owner is planned
 ## Applying a build in CI
 
 To patch a saved place version from CI (for example a Stable copy of Dev) with the same
-code the plugin uses, run `apply-task.luau` from a
-[release](https://github.com/Gravemind1142/rbxm-delivery/releases/latest) in an Open Cloud
+code the plugin uses, apply the build from your own patch script in an Open Cloud
 [Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
-task. It's the plugin's Apply bundled into one script, and returns a function:
+task. rbxm-delivery ships the plugin's Apply as the Lute package `rbxm-apply`; depend on it
+at the release tag that matches your `rbxm-publish`:
 
 ```luau
-local outcome = applyTask({
-    inputs = { ["managed.rbxm"] = rbxm, ["build.json"] = manifest }, -- buffers
-    args = { allowedRef = "refs/heads/main" }, -- optional; also dryRun = "true"
-})
--- outcome: { ok, summary, record?, rolledBack? }
+-- pkg.luau
+rbxmApply = {
+    sourceKind = "github",
+    source = "https://github.com/Gravemind1142/rbxm-delivery",
+    rev = "v0.1.0",
+    target = "pull",
+},
 ```
 
-The apply is all or nothing: if it fails, the place is as it was (`rolledBack = true`).
-It never saves; save the place only when `ok` is true. Run `rbxm-publish verify` on the
-build first. How to wrap it with your own patch scripts in one task: [spec §7.3](docs/spec.md#73-task-host-apply-tasklua).
+Then `lute pkg install --vendor`, require it from your patch script, and bundle the script
+into one file (a task runs one script source), for example with darklua:
+
+```luau
+local Apply = require("@rbxmApply")
+local manifest = Apply.Manifest.decode(buffer.tostring(inputs["build.json"]))
+local result = Apply.apply(game, inputs["managed.rbxm"], manifest, {})
+local record = Apply.record(manifest, result) -- what was applied, for your deploy report
+```
+
+The apply is all or nothing: if it errors, the place is as it was unless
+`Apply.rolledBack(err)` says otherwise. It never saves; save the place only when your whole
+patch succeeded. Run `rbxm-publish verify` on the build first.
+[`examples/patch-task`](examples/patch-task/patch.luau) is a complete patch script, and
+[spec §7.3](docs/spec.md#73-in-a-luau-execution-task-the-rbxm-apply-package) has the details.
 
 ## Contributing
 

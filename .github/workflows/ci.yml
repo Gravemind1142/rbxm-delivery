@@ -32,8 +32,9 @@ jobs:
       # Same as running `lute ci` locally; see .lute/ci.luau.
       - run: lute ci
 
-  # rbxm-pull's Jest tests and an end-to-end run of apply-task.luau, as Open Cloud Luau
-  # Execution tasks (no Studio on CI runners). Weekly and on demand only: pull requests run the
+  # rbxm-pull's Jest tests and an end-to-end run of the example patch script (Apply bundled
+  # with darklua, as a project would), as Open Cloud Luau Execution tasks (no Studio on CI
+  # runners). Weekly and on demand only: pull requests run the
   # mock tests in `lute ci` instead. Skipped with a warning until the ROBLOX_* secrets are set.
   # See "In the cloud" in CONTRIBUTING.md.
   pull-tests:
@@ -70,7 +71,7 @@ jobs:
         run: lute pull-tests --cloud
 
       - if: steps.secrets.outputs.present
-        run: lute apply-task-e2e --cloud
+        run: lute apply-e2e --cloud
 
   # Runs the publish action from this checkout, the way consumers use it.
   action:

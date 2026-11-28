@@ -1,8 +1,12 @@
 --!strict
 -- Applies a build to a place (spec §7). Plain Luau with no plugin dependencies, so both the
--- plugin and a Luau Execution task can require it; this folder is self-contained.
+-- plugin and a Luau Execution task can require it. This folder is self-contained: its modules
+-- only require each other, by path (`@self/...`), so it is also the Lute package `rbxm-apply`
+-- (pull/pkg.luau, spec §7.3) that a project bundles into its own patch script.
 --
 --   Apply.apply(dataModel, rbxm, manifest, options) -> Result
+--   Apply.record(manifest, result) -> Record   -- what was applied, for a deploy report
+--   Apply.rolledBack(message) -> boolean        -- whether a failed apply left the place as it was
 --
 -- Steps (spec §7.1):
 --   1. Verify the artifact's size and SHA-256 against the manifest.
@@ -18,10 +22,10 @@
 
 local SerializationService = game:GetService("SerializationService")
 
-local Manifest = require(script.Manifest)
-local Marker = require(script.Marker)
-local Paths = require(script.Paths)
-local Sha256 = require(script.Sha256)
+local Manifest = require("@self/Manifest")
+local Marker = require("@self/Marker")
+local Paths = require("@self/Paths")
+local Sha256 = require("@self/Sha256")
 
 export type Manifest = Manifest.Manifest
 
@@ -46,9 +50,30 @@ export type Result = {
 	dryRun: boolean,
 }
 
+-- What was applied, in a form a deploy report can store as-is. The build fields match
+-- `rbxm-publish verify --format json`.
+export type Record = {
+	applyVersion: string,
+	schemaVersion: number,
+	commit: string,
+	ref: string,
+	builtAt: string,
+	size: number,
+	sha256: string,
+	containers: { string },
+	replaced: { string },
+	added: { string },
+	removed: { string },
+	dryRun: boolean,
+}
+
 local ROOT_NAME = "RbxmDeliveryBuild"
 
 local Apply = {}
+
+-- rbxm-delivery's version, also in pull/pkg.luau. The release workflow refuses a tag that
+-- doesn't match it.
+Apply.VERSION = "0.1.0"
 
 Apply.PROTOCOL = Marker.PROTOCOL
 Apply.Manifest = Manifest
@@ -59,6 +84,30 @@ Apply.Sha256 = Sha256
 -- Error prefixes, so callers can tell a clean failure from one that left the place changed.
 Apply.ROLLED_BACK = "apply failed and was rolled back: "
 Apply.NOT_ROLLED_BACK = "apply failed and couldn't be fully rolled back"
+
+-- Whether an error from `Apply.apply` left the place as it was: true for every error except
+-- one starting with NOT_ROLLED_BACK. Either way a failed apply's place must not be saved.
+function Apply.rolledBack(message: string): boolean
+	return string.sub(message, 1, #Apply.NOT_ROLLED_BACK) ~= Apply.NOT_ROLLED_BACK
+end
+
+-- What `result` applied from `manifest`, for a deploy report.
+function Apply.record(manifest: Manifest, result: Result): Record
+	return {
+		applyVersion = Apply.VERSION,
+		schemaVersion = manifest.schemaVersion,
+		commit = manifest.commit,
+		ref = manifest.ref,
+		builtAt = manifest.builtAt,
+		size = manifest.artifact.size,
+		sha256 = manifest.artifact.sha256,
+		containers = table.clone(manifest.containers),
+		replaced = result.replaced,
+		added = result.added,
+		removed = result.removed,
+		dryRun = result.dryRun,
+	}
+end
 
 -- Step 1. Errors if `rbxm` isn't the artifact the manifest describes.
 function Apply.verify(rbxm: buffer, manifest: Manifest)

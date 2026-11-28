@@ -6,7 +6,7 @@ local command = { "stylua" }
 for _, arg in task.args(...) do
 	table.insert(command, arg)
 end
-for _, dir in { ".lute", "publish", "pull" } do
+for _, dir in { ".lute", "publish", "pull", "examples" } do
 	table.insert(command, dir)
 end
 task.must(command)

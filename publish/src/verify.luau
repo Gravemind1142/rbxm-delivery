@@ -53,7 +53,7 @@ function verify.run(options: Options): LoadedBuild
 	return { manifest = m, artifact = artifact, manifestSource = manifestSource }
 end
 
--- What `verify --format json` prints: one line, the same fields apply-task.luau records.
+-- What `verify --format json` prints: one line, the same build fields Apply.record records.
 function verify.summaryJson(m: manifest.Manifest): string
 	local s = json.serialize
 	local containers = {}

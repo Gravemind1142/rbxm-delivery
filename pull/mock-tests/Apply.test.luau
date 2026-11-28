@@ -1,7 +1,10 @@
--- The bundled Apply module against a mocked engine: applying, and rolling back by hand when
+-- Apply's source against a mocked engine: applying, and rolling back by hand when
 -- there's no ChangeHistoryService recording (spec §7.2). Run from the repository root.
 
+local json = require("@std/json")
 local test = require("@std/test")
+
+local verify = require("../../publish/src/verify")
 
 local Helpers = require("./Helpers")
 local Roblox = require("./Roblox")
@@ -104,6 +107,7 @@ test.case("rolls back when inserting really fails", function(check)
 		Apply.apply(game, rbxm, Apply.Manifest.validate(manifest), {})
 	end)
 	check.eq(err, `{Apply.ROLLED_BACK}mock: ServerScriptService rejects new children`)
+	check.eq(Apply.rolledBack(err), true)
 	check.eq(game.ReplicatedStorage.Systems, old)
 	check.eq(#game.ReplicatedStorage:GetChildren(), 1)
 end)
@@ -149,6 +153,7 @@ test.case("says so when it can't roll back", function(check)
 		})
 	end)
 	check.eq(string.sub(err, 1, #Apply.NOT_ROLLED_BACK), Apply.NOT_ROLLED_BACK)
+	check.eq(Apply.rolledBack(err), false)
 	check.eq(string.find(err, "restoring 'Systems'", 1, true) ~= nil, true)
 	check.eq(string.find(err, "don't save this place: injected failure", 1, true) ~= nil, true)
 	-- Everything else was still undone.
@@ -176,4 +181,45 @@ test.case("its SHA-256 agrees with Lute's", function(check)
 		end
 		check.eq(Apply.Sha256.hex(data), Helpers.hex(data))
 	end
+end)
+
+test.case("records what it applied, with the same build fields as rbxm-publish verify", function(check)
+	local Apply, g = Helpers.apply()
+	Helpers.existing(g.game.ReplicatedStorage, "Systems")
+	local rbxm, raw = Helpers.buildBoth()
+	local manifest = Apply.Manifest.validate(raw)
+	local record = Apply.record(manifest, Apply.apply(g.game, rbxm, manifest, {}))
+
+	check.eq(record.applyVersion, Apply.VERSION)
+	check.eq(record.replaced[1], SHARED)
+	check.eq(record.added[1], SERVER)
+	check.eq(#record.removed, 0)
+	check.eq(record.dryRun, false)
+	local summary = json.asObject(json.deserialize(verify.summaryJson(raw))) :: json.Object
+	for key, value in summary :: { [any]: any } do
+		if typeof(key) ~= "string" then
+			continue -- @std/json's own type tag
+		elseif key == "containers" then
+			check.eq(table.concat(record.containers, ","), table.concat(json.asArray(value) :: { any }, ","))
+		else
+			check.eq((record :: any)[key], value)
+		end
+	end
+end)
+
+test.case("records a dry run, which changes nothing", function(check)
+	local Apply, g = Helpers.apply()
+	local before = Helpers.snapshot(g.game)
+	local rbxm, raw = Helpers.buildBoth()
+	local manifest = Apply.Manifest.validate(raw)
+	local record = Apply.record(manifest, Apply.apply(g.game, rbxm, manifest, { dryRun = true }))
+	check.eq(record.dryRun, true)
+	check.eq(record.added[2], SERVER)
+	check.eq(Helpers.snapshot(g.game), before)
+end)
+
+test.case("its version matches the package's", function(check)
+	local Apply = Helpers.apply()
+	local pkg = require("../pkg")
+	check.eq(Apply.VERSION, pkg.package.version)
 end)

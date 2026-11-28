@@ -204,8 +204,10 @@ The plugin needs HTTP access to `api.github.com` and `release-assets.githubuserc
 
 ## 7. Apply module (part of rbxm-pull)
 
-Plain Luau with no plugin dependencies (`pull/src/Apply`). The plugin requires it, and
-each release also ships it bundled into one script for Luau Execution tasks (§7.3).
+Plain Luau with no plugin dependencies (`pull/src/Apply`). Its modules only require each
+other, by path (`require("@self/Manifest")`), so the same source runs in the plugin, under
+Lute, and in a project's own Luau Execution patch script, which pulls it in as the Lute
+package `rbxm-apply` (§7.3).
 
 ```luau
 Apply.apply(dataModel: DataModel, rbxm: buffer, manifest: Manifest, options: {
@@ -214,6 +216,11 @@ Apply.apply(dataModel: DataModel, rbxm: buffer, manifest: Manifest, options: {
     appliedBy: number?,      -- user ID for the marker's AppliedBy
     onStep: ((step: string) -> ())?, -- called as each part of step 4 starts (tests)
 }): Result -- { commit, replaced, added, removed, dryRun }
+
+Apply.record(manifest, result): Record -- what was applied, for a deploy report (§7.3)
+Apply.rolledBack(message: string): boolean -- whether a failed apply left the place as it was
+Apply.Manifest.decode(json: string): Manifest -- refuses an unknown schemaVersion
+Apply.VERSION -- the release version, e.g. "0.1.0"
 ```
 
 Everything it needs from the last apply is on the marker, so it never needs an earlier
@@ -286,69 +293,87 @@ If restoring itself fails, Apply keeps restoring what it can and errors with
 <reason>`. That can't happen through Apply's own steps; it would take something else
 changing the place mid-apply (such as a parent that refuses children).
 
-### 7.3 Task host: `apply-task.luau`
+### 7.3 In a Luau Execution task: the `rbxm-apply` package
 
 An Open Cloud [Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
 task runs one script source against a saved place version, so CI can patch a place (for
 example a Stable copy of Dev) with the same code the plugin uses, then save and publish it.
-A task can't require files from a repo, so each release ships `apply-task.luau`: Apply
-bundled into one file with no requires, built by `lute build-apply-task`. (Tasks can
-require ModuleScripts deserialized from a binary input, which is how the cloud tests run,
-but those would have to be parented into the place being saved.)
 
-The file returns one function:
+rbxm-delivery doesn't ship that script. What a patch does besides applying the build
+(stripping PackageLinks, stamping build info, which refs may ship), in what order, and
+what counts as success is the project's call, so the project writes the script and
+rbxm-delivery ships Apply as a library for it: the Lute package `rbxm-apply`
+(`pull/pkg.luau`, holding only `pull/src/Apply`). A project depends on it from this
+repository, pinned to the release tag that matches its `rbxm-publish`, so the build and the
+code applying it always come from the same release:
 
 ```luau
-return function(ctx: {
-    inputs: { [string]: buffer }, -- "managed.rbxm" and "build.json"
-    args: { [string]: string }?,   -- optional: dryRun = "true"; allowedRef = "refs/heads/main[,...]"
-    log: ((string) -> ())?,        -- defaults to print
-}): {
-    ok: boolean,
-    summary: string,               -- "applied <commit> (<n> containers)", or the reason
-    record: { [string]: any }?,    -- on success
-    rolledBack: boolean?,          -- on failure: whether the place is as it was
+-- the project's pkg.luau
+return {
+    package = {
+        dependencies = {
+            rbxmApply = {
+                sourceKind = "github",
+                source = "https://github.com/Gravemind1142/rbxm-delivery",
+                rev = "v0.1.0",
+                target = "pull",
+            },
+        },
+    },
 }
 ```
 
-It decodes `build.json` (refusing an unknown `schemaVersion`), checks `allowedRef` if given,
-and calls `Apply.apply(game, managed.rbxm, manifest, { dryRun })`. Apply's step 4 checks
-the result. `record` holds `applyVersion`, the same build fields as `rbxm-publish verify
---format json` (`schemaVersion`, `commit`, `ref`, `builtAt`, `size`, `sha256`,
-`containers`), and `replaced`, `added`, `removed` and `dryRun`, so a pipeline can check
-that the task applied the build it verified. It never saves: the caller saves only when
-`ok` is true. With `ok = false`, `rolledBack = false` means the place was left partly
-changed; never save it.
+`lute pkg install --vendor` copies the package into the project's `.lpm/`. A task can't
+require files from a repo, so the project bundles its patch script and the package into
+one file before creating the task, for example with darklua's `luau` require mode and an
+alias pointing at the vendored package:
 
-A pipeline runs it alongside its own patch scripts in one task by wrapping it:
-
-```luau
---!native
-local ctx = ...
-local applyTask = (function()
-    -- contents of apply-task.luau
-end)()
-local outcome = applyTask({
-    inputs = { ["managed.rbxm"] = ctx.inputs.managed, ["build.json"] = ctx.inputs.manifest },
-    args = { allowedRef = "refs/heads/main" },
-})
-if not outcome.ok then
-    error(outcome.summary)
-end
--- ...the project's own patch scripts, then save...
+```sh
+darklua process deploy/patch.luau build/patch.luau
 ```
 
-`--!native` only applies at the top of a script, so keep it there: SHA-256 is much slower
-without native code. `lute apply-task-e2e` runs exactly this against the fixture build.
+[`examples/patch-task`](../examples/patch-task) is a patch script written that way, in the
+shape `{ ok, summary, record?, rolledBack? }` a task runner such as place-promote expects:
+
+```luau
+local Apply = require("@rbxmApply")
+
+return function(ctx)
+    local manifest = Apply.Manifest.decode(buffer.tostring(ctx.inputs["build.json"]))
+    -- check manifest.ref against the project's allowed refs
+    local result = Apply.apply(game, ctx.inputs["managed.rbxm"], manifest, {})
+    -- ...the project's other steps, each checking its own result...
+    return { ok = true, summary = `applied {manifest.commit}`, record = Apply.record(manifest, result) }
+end
+```
+
+(the example also catches errors and reports `rolledBack = Apply.rolledBack(message)`).
+`lute build-patch-example` bundles it with darklua, the mock tests run the bundle under
+Lute, and `lute apply-e2e` runs it as a real task against the fixture build.
+
+What Apply gives the patch script:
+- **Checks:** `Apply.Manifest.decode` refuses an unknown `schemaVersion` and a malformed
+  `build.json`; `Apply.apply` checks the size and SHA-256, the build's shape and every target
+  parent before changing anything, and checks its own result after (§7.1).
+- **A record:** `Apply.record(manifest, result)` holds `applyVersion`, the same build fields
+  as `rbxm-publish verify --format json` (`schemaVersion`, `commit`, `ref`, `builtAt`,
+  `size`, `sha256`, `containers`), and `replaced`, `added`, `removed` and `dryRun`, so a
+  pipeline can check that the task applied the build it verified.
+- **All or nothing:** a failed apply is rolled back by hand (§7.2). `Apply.rolledBack(err)`
+  is false only for an error starting `apply failed and couldn't be fully rolled back`. It
+  never saves: the task runner saves only when the script returns `ok = true`, so a partial
+  change from a later step isn't saved either.
 
 Differences from the plugin:
 - No user: the marker's `AppliedBy` is 0.
 - No `ChangeHistoryService`: tasks lack the Plugin capability, so Apply never fetches the
   service without `changeHistory`, and rolls back by hand (§7.2).
-- A task is limited to 5 minutes, shared with the project's own patch scripts. SHA-256 is
-  about 1.6 s per 4 MiB in Studio, and rollback of 5,000 scripts about 0.6 s.
-- Run `rbxm-publish verify` (§5.2) on the downloaded build before creating the task, to fail
-  before uploading anything.
+- Native code: SHA-256 is much slower without it. `--!native` only applies at the top of a
+  task's source, so the task runner, not the bundled script, has to set it.
+- A task is limited to 5 minutes, shared with the project's other steps. SHA-256 is about
+  1.6 s per 4 MiB in Studio, and rollback of 5,000 scripts about 0.6 s.
+- Run `rbxm-publish verify` (§5.2) on the build before creating the task, to fail before
+  uploading anything.
 
 ## 8. Security
 

@@ -3,6 +3,7 @@ name: Release
 # Pushing a tag like v0.1.0 builds rbxm-publish for each platform with `lute compile` and
 # publishes a GitHub release that Foreman can install from:
 #   rbxm-publish = { github = "Gravemind1142/rbxm-delivery", version = "=0.1.0" }
+# The same tag is the `rev` projects pin the rbxm-apply Lute package (pull/pkg.luau) to.
 
 on:
   push:
@@ -12,7 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  # The tag must match the version in the source, so `rbxm-publish --version` and Foreman agree.
+  # The tag must match every version in the source, so `rbxm-publish --version`, Foreman, the
+  # plugin and the rbxm-apply package all agree.
   version:
     runs-on: ubuntu-latest
     steps:
@@ -22,12 +24,15 @@ jobs:
         run: |
           cli="$(sed -n 's/^return "\(.*\)"$/\1/p' publish/src/version.luau)"
           plugin="$(sed -n 's/^version = "\(.*\)"$/\1/p' pull/wally.toml)"
-          echo "tag=$GITHUB_REF_NAME rbxm-publish=$cli rbxm-pull=$plugin"
+          package="$(sed -n 's/^[[:space:]]*version = "\(.*\)",$/\1/p' pull/pkg.luau)"
+          apply="$(sed -n 's/^Apply.VERSION = "\(.*\)"$/\1/p' pull/src/Apply/init.luau)"
+          echo "tag=$GITHUB_REF_NAME rbxm-publish=$cli rbxm-pull=$plugin rbxm-apply=$package Apply.VERSION=$apply"
           test "$GITHUB_REF_NAME" = "v$cli" || { echo "::error::Tag $GITHUB_REF_NAME doesn't match publish/src/version.luau ($cli)"; exit 1; }
           test "$GITHUB_REF_NAME" = "v$plugin" || { echo "::error::Tag $GITHUB_REF_NAME doesn't match pull/wally.toml ($plugin)"; exit 1; }
+          test "$GITHUB_REF_NAME" = "v$package" || { echo "::error::Tag $GITHUB_REF_NAME doesn't match pull/pkg.luau ($package)"; exit 1; }
+          test "$GITHUB_REF_NAME" = "v$apply" || { echo "::error::Tag $GITHUB_REF_NAME doesn't match Apply.VERSION in pull/src/Apply/init.luau ($apply)"; exit 1; }
 
-  # The rbxm-pull Studio plugin, so users can install it without the toolchain, and
-  # apply-task.luau, Apply bundled into one script for Open Cloud Luau Execution tasks.
+  # The rbxm-pull Studio plugin, so users can install it without the toolchain.
   plugin:
     needs: version
     runs-on: ubuntu-latest
@@ -41,14 +46,10 @@ jobs:
 
       - run: lute build-plugin
 
-      - run: lute build-apply-task
-
       - uses: actions/upload-artifact@v4
         with:
           name: plugin
-          path: |
-            build/RbxmPull.rbxm
-            build/apply-task.luau
+          path: build/RbxmPull.rbxm
 
   compile:
     needs: version
@@ -116,5 +117,5 @@ jobs:
         run: |
           # --latest so the rolling channel releases (dev-latest, ci-fixture) never show as the
           # repo's latest release.
-          gh release create "$GITHUB_REF_NAME" assets/*.zip assets/RbxmPull.rbxm assets/apply-task.luau \
+          gh release create "$GITHUB_REF_NAME" assets/*.zip assets/RbxmPull.rbxm \
             --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --latest
