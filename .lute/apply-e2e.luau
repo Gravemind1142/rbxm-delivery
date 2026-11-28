@@ -6,7 +6,7 @@
 --
 -- Locally it needs Windows or macOS with Roblox Studio. With --cloud (or
 -- STUDIO_RUN_HOST=cloud) it runs as an Open Cloud Luau Execution task, which needs
--- ROBLOX_API_KEY, ROBLOX_UNIVERSE_ID and ROBLOX_PLACE_ID; CI runs it weekly.
+-- ROBLOX_API_KEY, ROBLOX_UNIVERSE_ID and ROBLOX_PLACE_ID; CI runs it on every run.
 local process = require("@std/process")
 local task = require("./_lib/task")
 

@@ -1,7 +1,7 @@
 --!strict
 -- Just enough of the Roblox engine to run Apply's source (pull/src/Apply) under Lute, so pull requests can
 -- test it without Studio or an Open Cloud task. The real engine runs the same code in
--- pull/tests (Studio locally, and the weekly cloud run).
+-- pull/tests (Studio locally, and in the cloud in CI).
 --
 -- Instances support Name, ClassName, Parent, arbitrary properties (e.g. Source), attributes,
 -- GetChildren, FindFirstChild, GetDescendants, IsDescendantOf, IsA and Destroy. Setting the
