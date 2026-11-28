@@ -18,7 +18,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: Roblox/setup-foreman@v3
         with:
@@ -53,7 +53,7 @@ jobs:
           fi
 
       - if: steps.secrets.outputs.present
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - if: steps.secrets.outputs.present
         uses: Roblox/setup-foreman@v3
@@ -75,7 +75,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - id: publish
         uses: ./publish
@@ -116,7 +116,7 @@ jobs:
       group: rbxm-publish-ci-fixture
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - id: publish
         uses: ./publish
