@@ -5,6 +5,25 @@ together.
 
 ## Unreleased
 
+- **`rbxm-publish verify`** checks a build directory without publishing it (schema version,
+  size and SHA-256, optionally the ref), with `--format json` for pipelines
+  ([#15](https://github.com/Gravemind1142/rbxm-delivery/issues/15)).
+- **`rbxm-apply` Lute package** (`pull/pkg.luau`): the plugin's Apply as a library, so a
+  project can apply a build from its own Open Cloud Luau Execution patch script. Depend on
+  it with `sourceKind = "github"`, `target = "pull"` and the release tag as `rev`; how the
+  patch script becomes one task source is up to the project. New `Apply.record` (what was
+  applied, with the same build fields as `rbxm-publish verify --format json`),
+  `Apply.rolledBack` and `Apply.VERSION`
+  ([#13](https://github.com/Gravemind1142/rbxm-delivery/issues/13)).
+- Apply's modules require each other by path (`require("@self/Manifest")`) instead of
+  `require(script.Manifest)`, so the same source runs in the plugin, under Lute and in a
+  project's task.
+- Apply is all or nothing in every host: without a ChangeHistoryService recording it now
+  rolls a failed apply back by hand, and it checks the result before finishing
+  ([#14](https://github.com/Gravemind1142/rbxm-delivery/issues/14)).
+- `build.json` with a container inside another container (or listed twice) is refused by
+  rbxm-pull and `rbxm-publish verify`/`release`. rbxm-publish never built one.
+
 ## 0.1.0
 
 First release.

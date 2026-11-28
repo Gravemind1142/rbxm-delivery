@@ -1,26 +1,31 @@
 --!strict
 -- Applies a build to a place (spec §7). Plain Luau with no plugin dependencies, so both the
--- plugin and a Luau Execution task can require it; this folder is self-contained.
+-- plugin and a Luau Execution task can require it. This folder is self-contained: its modules
+-- only require each other, by path (`@self/...`), so it is also the Lute package `rbxm-apply`
+-- (pull/pkg.luau, spec §7.3) that a project uses in its own patch script.
 --
 --   Apply.apply(dataModel, rbxm, manifest, options) -> Result
+--   Apply.record(manifest, result) -> Record   -- what was applied, for a deploy report
+--   Apply.rolledBack(message) -> boolean        -- whether a failed apply left the place as it was
 --
 -- Steps (spec §7.1):
 --   1. Verify the artifact's size and SHA-256 against the manifest.
 --   2. Deserialize; the root must be the RbxmDeliveryBuild folder holding exactly the
 --      manifest's containers.
 --   3. Resolve every target parent. Nothing has changed if any of this fails.
---   4. Remove everything at the old and new container paths, insert the new containers and
---      write the marker, inside one ChangeHistoryService recording when `changeHistory` is
---      set. An error here cancels the recording so Studio rolls the partial change back.
---      Inside a recording, removal is `Parent = nil`: a cancelled recording restores those,
---      but not instances removed with Destroy().
+--   4. Remove everything at the old and new container paths (with `Parent = nil`), insert
+--      the new containers, write the marker and check the result. All or nothing in every
+--      host: an error here is rolled back, by cancelling the ChangeHistoryService recording
+--      when `changeHistory` is set, otherwise by hand (inserted containers are removed,
+--      removed instances go back to their parents and the marker gets its old attributes).
+--      Without a recording, removed instances are destroyed only once the apply succeeds.
 
 local SerializationService = game:GetService("SerializationService")
 
-local Manifest = require(script.Manifest)
-local Marker = require(script.Marker)
-local Paths = require(script.Paths)
-local Sha256 = require(script.Sha256)
+local Manifest = require("@self/Manifest")
+local Marker = require("@self/Marker")
+local Paths = require("@self/Paths")
+local Sha256 = require("@self/Sha256")
 
 export type Manifest = Manifest.Manifest
 
@@ -31,8 +36,8 @@ export type Options = {
 	changeHistory: boolean?,
 	-- User ID recorded as the marker's AppliedBy.
 	appliedBy: number?,
-	-- Called as each step of the change starts ("destroy", "insert", "marker"). An error it
-	-- raises aborts the apply like any other; tests use this to check rollback.
+	-- Called as each step of the change starts ("remove", "insert", "marker", "check"). An
+	-- error it raises aborts the apply like any other; tests use this to check rollback.
 	onStep: ((step: string) -> ())?,
 }
 
@@ -45,14 +50,64 @@ export type Result = {
 	dryRun: boolean,
 }
 
+-- What was applied, in a form a deploy report can store as-is. The build fields match
+-- `rbxm-publish verify --format json`.
+export type Record = {
+	applyVersion: string,
+	schemaVersion: number,
+	commit: string,
+	ref: string,
+	builtAt: string,
+	size: number,
+	sha256: string,
+	containers: { string },
+	replaced: { string },
+	added: { string },
+	removed: { string },
+	dryRun: boolean,
+}
+
 local ROOT_NAME = "RbxmDeliveryBuild"
 
 local Apply = {}
 
+-- rbxm-delivery's version, also in pull/pkg.luau. The release workflow refuses a tag that
+-- doesn't match it.
+Apply.VERSION = "0.1.0"
+
 Apply.PROTOCOL = Marker.PROTOCOL
 Apply.Manifest = Manifest
 Apply.Marker = Marker
+Apply.Paths = Paths
 Apply.Sha256 = Sha256
+
+-- Error prefixes, so callers can tell a clean failure from one that left the place changed.
+Apply.ROLLED_BACK = "apply failed and was rolled back: "
+Apply.NOT_ROLLED_BACK = "apply failed and couldn't be fully rolled back"
+
+-- Whether an error from `Apply.apply` left the place as it was: true for every error except
+-- one starting with NOT_ROLLED_BACK. Either way a failed apply's place must not be saved.
+function Apply.rolledBack(message: string): boolean
+	return string.sub(message, 1, #Apply.NOT_ROLLED_BACK) ~= Apply.NOT_ROLLED_BACK
+end
+
+-- What `result` applied from `manifest`, for a deploy report.
+function Apply.record(manifest: Manifest, result: Result): Record
+	return {
+		applyVersion = Apply.VERSION,
+		schemaVersion = manifest.schemaVersion,
+		commit = manifest.commit,
+		ref = manifest.ref,
+		builtAt = manifest.builtAt,
+		size = manifest.artifact.size,
+		sha256 = manifest.artifact.sha256,
+		containers = table.clone(manifest.containers),
+		replaced = result.replaced,
+		added = result.added,
+		removed = result.removed,
+		dryRun = result.dryRun,
+	}
+end
 
 -- Step 1. Errors if `rbxm` isn't the artifact the manifest describes.
 function Apply.verify(rbxm: buffer, manifest: Manifest)
@@ -160,27 +215,39 @@ function Apply.apply(dataModel: Instance, rbxm: buffer, manifest: Manifest, opti
 		return result
 	end
 
-	-- Step 4.
-	local ChangeHistoryService = game:GetService("ChangeHistoryService")
+	-- Step 4. ChangeHistoryService is only fetched for a recording: hosts without the Plugin
+	-- capability (Luau Execution tasks) can't use it.
+	local ChangeHistoryService: ChangeHistoryService? = nil
 	local recording: string? = nil
 	if opts.changeHistory then
-		recording = ChangeHistoryService:TryBeginRecording("rbxm-pull: apply " .. string.sub(manifest.commit, 1, 7))
+		ChangeHistoryService = game:GetService("ChangeHistoryService")
+		recording = (ChangeHistoryService :: ChangeHistoryService):TryBeginRecording(
+			"rbxm-pull: apply " .. string.sub(manifest.commit, 1, 7)
+		)
 		if recording == nil then
 			error("can't apply: Studio didn't allow a change history recording (another is in progress?)", 0)
 		end
 	end
 
+	-- What the change did so far, so it can be undone by hand when there's no recording.
+	local removed: { { instance: Instance, parent: Instance } } = {}
+	local inserted: { Instance } = {}
+	local markerBefore = Marker.find(dataModel)
+	local markerAttributes = if markerBefore then Marker.snapshotApplied(markerBefore) else nil
+	local markerCreated: Instance? = nil
+
 	local ok, err = pcall(function()
 		if opts.onStep then
-			opts.onStep("destroy")
+			opts.onStep("remove")
 		end
+		-- Parent = nil, not Destroy(): a cancelled recording restores instances parented to nil
+		-- (as Studio's own Delete does) but not destroyed ones, and the manual rollback needs
+		-- them intact too.
 		for _, instance in doomed do
-			-- Cancelling a recording restores instances parented to nil (as Studio's own Delete
-			-- does) but not Destroy()ed ones, so only destroy when there's nothing to roll back.
-			if recording then
+			local parent = instance.Parent
+			if parent then
+				table.insert(removed, { instance = instance, parent = parent })
 				instance.Parent = nil
-			else
-				instance:Destroy()
 			end
 		end
 
@@ -190,31 +257,96 @@ function Apply.apply(dataModel: Instance, rbxm: buffer, manifest: Manifest, opti
 		for _, path in manifest.containers do
 			local container = containers[path]
 			container.Name = Paths.leaf(path)
+			table.insert(inserted, container)
 			container.Parent = parents[path]
 		end
 
 		if opts.onStep then
 			opts.onStep("marker")
 		end
-		Marker.writeApplied(Marker.findOrCreate(dataModel), {
+		local marker = Marker.findOrCreate(dataModel)
+		if marker ~= markerBefore then
+			markerCreated = marker
+		end
+		Marker.writeApplied(marker, {
 			commit = manifest.commit,
 			schemaVersion = manifest.schemaVersion,
 			appliedAt = DateTime.now():ToIsoDate(),
 			appliedBy = opts.appliedBy or 0,
 			containers = manifest.containers,
 		})
+
+		-- Check the place holds what was asked for before committing to it.
+		if opts.onStep then
+			opts.onStep("check")
+		end
+		if Marker.read(marker).commit ~= manifest.commit then
+			error(`the marker doesn't record commit {manifest.commit} after writing it`, 0)
+		end
+		for _, path in manifest.containers do
+			local parent = Paths.resolveParent(dataModel, path)
+			local found = if parent then Paths.childrenNamed(parent, Paths.leaf(path)) else {}
+			if #found ~= 1 or found[1] ~= containers[path] then
+				error(`container '{path}' resolves to {#found} instances after inserting it`, 0)
+			end
+		end
 	end)
 
 	if recording then
-		ChangeHistoryService:FinishRecording(
+		(ChangeHistoryService :: ChangeHistoryService):FinishRecording(
 			recording,
 			if ok then Enum.FinishRecordingOperation.Commit else Enum.FinishRecordingOperation.Cancel
 		)
+		if not ok then
+			error(`{Apply.ROLLED_BACK}{err}`, 0)
+		end
+		return result
 	end
-	if not ok then
-		error(`apply failed{if recording then " and was rolled back" else ""}: {err}`, 0)
+
+	if ok then
+		for _, entry in removed do
+			entry.instance:Destroy()
+		end
+		return result
 	end
-	return result
+
+	-- Roll back by hand, newest change first. Keep going past failures so as much as possible
+	-- is restored, and report them.
+	local failures: { string } = {}
+	local function attempt(what: string, f: () -> ())
+		local restored, reason = pcall(f)
+		if not restored then
+			table.insert(failures, `{what}: {reason}`)
+		end
+	end
+	if markerCreated then
+		attempt("removing the marker", function()
+			(markerCreated :: Instance):Destroy()
+		end)
+	elseif markerBefore and markerAttributes then
+		attempt("restoring the marker", function()
+			Marker.restoreApplied(markerBefore, markerAttributes)
+		end)
+	end
+	for i = #inserted, 1, -1 do
+		attempt(`removing '{inserted[i].Name}'`, function()
+			inserted[i].Parent = nil
+		end)
+	end
+	for i = #removed, 1, -1 do
+		local entry = removed[i]
+		attempt(`restoring '{entry.instance.Name}'`, function()
+			entry.instance.Parent = entry.parent
+		end)
+	end
+	for _, container in containers do
+		pcall(container.Destroy, container)
+	end
+
+	if #failures > 0 then
+		error(`{Apply.NOT_ROLLED_BACK} ({table.concat(failures, "; ")}); don't save this place: {err}`, 0)
+	end
+	error(`{Apply.ROLLED_BACK}{err}`, 0)
 end
 
 return Apply

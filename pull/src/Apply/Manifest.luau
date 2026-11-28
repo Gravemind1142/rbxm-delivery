@@ -57,6 +57,14 @@ function Manifest.validate(object: any): Manifest
 		seen[path] = true
 		table.insert(containers, path)
 	end
+	-- rbxm-publish never builds these; a container inside another would be replaced twice.
+	for _, outer in containers do
+		for _, inner in containers do
+			if string.sub(inner, 1, #outer + 1) == outer .. "/" then
+				error(`build.json containers '{outer}' and '{inner}' overlap`, 0)
+			end
+		end
+	end
 
 	return {
 		schemaVersion = Manifest.SCHEMA_VERSION,

@@ -76,11 +76,25 @@ function manifest.decode(source: string): Manifest
 	end
 
 	local containers: { string } = {}
+	local seen: { [string]: boolean } = {}
 	for i, value in json.asArray(object.containers) or {} do
-		table.insert(containers, str(value, `containers[{i}]`))
+		local path = str(value, `containers[{i}]`)
+		if seen[path] then
+			error(`build.json lists container '{path}' twice`, 0)
+		end
+		seen[path] = true
+		table.insert(containers, path)
 	end
 	if #containers == 0 then
 		error("build.json 'containers' must be a non-empty array", 0)
+	end
+	-- Same checks as rbxm-pull's Apply: a container inside another would be replaced twice.
+	for _, outer in containers do
+		for _, inner in containers do
+			if string.sub(inner, 1, #outer + 1) == outer .. "/" then
+				error(`build.json containers '{outer}' and '{inner}' overlap`, 0)
+			end
+		end
 	end
 
 	return {

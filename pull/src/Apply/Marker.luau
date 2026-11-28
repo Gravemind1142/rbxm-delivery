@@ -127,6 +127,25 @@ function Marker.configure(marker: Configuration, settings: Settings)
 	end
 end
 
+-- The attributes writeApplied sets.
+Marker.APPLIED_ATTRIBUTES = { "Commit", "SchemaVersion", "AppliedAt", "AppliedBy", "Protocol", "Containers" }
+
+-- The current values of the attributes writeApplied sets, for restoreApplied.
+function Marker.snapshotApplied(marker: Configuration): { [string]: any }
+	local values = {}
+	for _, name in Marker.APPLIED_ATTRIBUTES do
+		values[name] = marker:GetAttribute(name)
+	end
+	return values
+end
+
+-- Puts back what snapshotApplied saw, including removing attributes that weren't set.
+function Marker.restoreApplied(marker: Configuration, values: { [string]: any })
+	for _, name in Marker.APPLIED_ATTRIBUTES do
+		marker:SetAttribute(name, values[name])
+	end
+end
+
 function Marker.writeApplied(marker: Configuration, applied: Applied)
 	marker:SetAttribute("Commit", applied.commit)
 	marker:SetAttribute("SchemaVersion", applied.schemaVersion)

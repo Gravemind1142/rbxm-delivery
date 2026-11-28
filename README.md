@@ -129,6 +129,19 @@ The token needs `contents: write`; `--repo` defaults to `GITHUB_REPOSITORY`.
 
 Workflows that publish should still use a `concurrency` group per channel.
 
+## rbxm-publish verify
+
+```sh
+rbxm-publish verify [--dir build/] [--allowed-ref refs/heads/main ...] [--format text|json]
+```
+
+Runs the checks from `release` step 1 without publishing anything: a known `build.json`
+`schemaVersion`, `managed.rbxm` size and SHA-256 matching it, and the ref if any
+`--allowed-ref` is given. Exits 0 if the build is good and 1 with the reason if not. With
+`--format json` it prints `{ schemaVersion, commit, ref, builtAt, size, sha256, containers }`
+on one line. Use it in pipelines that consume a build outside the plugin, such as
+[applying it in a Luau Execution task](#applying-a-build-in-ci), before uploading anything.
+
 ## rbxm-pull (Studio plugin)
 
 A toolbar button opens a widget showing
@@ -158,8 +171,38 @@ Install it from a [release](https://github.com/Gravemind1142/rbxm-delivery/relea
 syncing by a designated owner is planned
 ([#1](https://github.com/Gravemind1142/rbxm-delivery/issues/1)).
 
-`pull/src/Apply` is self-contained, so a Luau Execution task can require it too:
-`Apply.apply(game, rbxm, manifest, { dryRun = true })`.
+## Applying a build in CI
+
+To patch a saved place version from CI (for example a Stable copy of Dev) with the same
+code the plugin uses, apply the build from your own patch script in an Open Cloud
+[Luau Execution](https://create.roblox.com/docs/cloud/reference/features/luau-execution)
+task. rbxm-delivery ships the plugin's Apply as the Lute package `rbxm-apply`; depend on it
+at the release tag that matches your `rbxm-publish`:
+
+```luau
+-- pkg.luau
+rbxmApply = {
+    sourceKind = "github",
+    source = "https://github.com/Gravemind1142/rbxm-delivery",
+    rev = "v0.1.0",
+    target = "pull",
+},
+```
+
+Then `lute pkg install --vendor` and require it from your patch script. How the script
+becomes the one source a task runs is up to you:
+
+```luau
+local Apply = require("@rbxmApply")
+local manifest = Apply.Manifest.decode(buffer.tostring(inputs["build.json"]))
+local result = Apply.apply(game, inputs["managed.rbxm"], manifest, {})
+local record = Apply.record(manifest, result) -- what was applied, for your deploy report
+```
+
+The apply is all or nothing: if it errors, the place is as it was unless
+`Apply.rolledBack(err)` says otherwise. It never saves; save the place only when your whole
+patch succeeded. Run `rbxm-publish verify` on the build first.
+[Spec §7.3](docs/spec.md#73-in-a-luau-execution-task-the-rbxm-apply-package) has the details.
 
 ## Contributing
 

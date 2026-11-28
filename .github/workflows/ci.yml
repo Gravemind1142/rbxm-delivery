@@ -28,9 +28,10 @@ jobs:
       # Same as running `lute ci` locally; see .lute/ci.luau.
       - run: lute ci
 
-  # rbxm-pull's Jest tests, as an Open Cloud Luau Execution task (no Studio on CI runners).
-  # Skipped with a warning until the ROBLOX_* secrets are set, and on fork PRs, which can't
-  # read them. See "Plugin tests in the cloud" in the README.
+  # rbxm-pull's Jest tests and an end-to-end apply of a real build with the released Apply
+  # module, as Open Cloud Luau Execution tasks (no Studio on CI runners), on every CI run.
+  # Skipped with a warning when the ROBLOX_* secrets aren't available (not set yet, or a pull
+  # request from a fork). See "In the cloud" in CONTRIBUTING.md.
   pull-tests:
     runs-on: ubuntu-latest
     # One run at a time: Roblox allows 5 task creations a minute per account.
@@ -62,6 +63,9 @@ jobs:
 
       - if: steps.secrets.outputs.present
         run: lute pull-tests --cloud
+
+      - if: steps.secrets.outputs.present
+        run: lute apply-e2e --cloud
 
   # Runs the publish action from this checkout, the way consumers use it.
   action:

@@ -1,7 +1,7 @@
 --!strict
 -- Command-line parsing for rbxm-publish (spec §5.2).
 
-export type Command = "build" | "release"
+export type Command = "build" | "release" | "verify"
 
 export type Parsed = {
 	command: Command,
@@ -11,6 +11,7 @@ export type Parsed = {
 local COMMANDS: { [string]: { [string]: "one" | "many" } } = {
 	build = { config = "one", out = "one", commit = "one", ref = "one" },
 	release = { dir = "one", repo = "one", channel = "one", ["allowed-ref"] = "many" },
+	verify = { dir = "one", ["allowed-ref"] = "many", format = "one" },
 }
 
 local args = {}
@@ -19,11 +20,11 @@ local args = {}
 function args.parse(argv: { string }): (Parsed?, string?)
 	local command = argv[1]
 	if command == nil then
-		return nil, "missing command (expected one of: build, release)"
+		return nil, "missing command (expected one of: build, release, verify)"
 	end
 	local spec = COMMANDS[command]
 	if spec == nil then
-		return nil, `unknown command '{command}' (expected one of: build, release)`
+		return nil, `unknown command '{command}' (expected one of: build, release, verify)`
 	end
 
 	local flags: { [string]: { string } } = {}

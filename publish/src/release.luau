@@ -9,12 +9,9 @@
 --   4. For each file: delete the old asset, rename the new one into place.
 --   5. Update the release body, then move the tag, so the tag reflects what's published.
 
-local crypto = require("@lute/crypto")
-local fs = require("@std/fs")
-local pathlib = require("@std/path")
-
 local github = require("./github")
 local manifest = require("./manifest")
+local verify = require("./verify")
 
 export type Options = {
 	dir: string,
@@ -34,31 +31,6 @@ export type Result = {
 local UPLOADING_SUFFIX = ".uploading"
 
 local release = {}
-
-export type LoadedBuild = { manifest: manifest.Manifest, artifact: string, manifestSource: string }
-
--- Reads build/ and checks managed.rbxm against build.json.
-function release.loadBuild(dir: string): LoadedBuild
-	local manifestPath = pathlib.format(pathlib.join(dir, manifest.MANIFEST_NAME))
-	local artifactPath = pathlib.format(pathlib.join(dir, manifest.ARTIFACT_NAME))
-	for _, path in { manifestPath, artifactPath } do
-		if not fs.exists(path) then
-			error(`'{path}' not found; run 'rbxm-publish build' first`, 0)
-		end
-	end
-
-	local manifestSource = fs.readFileToString(manifestPath)
-	local m = manifest.decode(manifestSource)
-	local artifact = fs.readFileToString(artifactPath)
-	if #artifact ~= m.artifact.size then
-		error(`managed.rbxm is {#artifact} bytes but build.json says {m.artifact.size}`, 0)
-	end
-	local sha256 = manifest.hex(crypto.digest(crypto.hash.sha256, artifact))
-	if sha256 ~= m.artifact.sha256 then
-		error(`managed.rbxm has sha256 {sha256} but build.json says {m.artifact.sha256}`, 0)
-	end
-	return { manifest = m, artifact = artifact, manifestSource = manifestSource }
-end
 
 function release.validateChannel(channel: string)
 	if
@@ -91,7 +63,7 @@ function release.run(options: Options): Result
 		error("at least one --allowed-ref is required", 0)
 	end
 
-	local build = release.loadBuild(options.dir)
+	local build = verify.run({ dir = options.dir })
 	local m = build.manifest
 	if not table.find(options.allowedRefs, m.ref) then
 		error(`refusing to release a build of '{m.ref}': allowed refs are {table.concat(options.allowedRefs, ", ")}`, 0)
