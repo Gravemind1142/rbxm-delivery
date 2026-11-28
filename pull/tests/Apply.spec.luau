@@ -364,4 +364,134 @@ describe("Apply.apply", function()
 			existing.Parent = sharedParent
 		end).toThrow()
 	end)
+
+	local function failAt(step: string)
+		return {
+			onStep = function(current)
+				if current == step then
+					error("injected failure", 0)
+				end
+			end,
+		}
+	end
+
+	for _, step in { "remove", "insert", "marker", "check" } do
+		it(`rolls back by hand when failing at '{step}'`, function()
+			-- A previous apply, so the marker's attributes must come back exactly.
+			local previous, previousManifest = Helpers.build({ { path = SHARED } }, string.rep("1", 40))
+			Apply.apply(game, previous, previousManifest, { appliedBy = 7 })
+			local existing = sharedParent:FindFirstChild("Systems") :: Instance
+			local sibling = Helpers.folder(sharedParent, "Levels")
+			local markerBefore = marker()
+			local attributes = markerBefore:GetAttributes()
+
+			local rbxm, manifest = buildBoth()
+			local ok, err = pcall(Apply.apply, game, rbxm, manifest, failAt(step))
+			expect(ok).toBe(false)
+			expect(tostring(err)).toBe(`{Apply.ROLLED_BACK}injected failure`)
+			expect(Apply.rolledBack(tostring(err))).toBe(true)
+
+			-- The same instances, and the marker as it was.
+			local restored = Paths.childrenNamed(sharedParent, "Systems")
+			expect(#restored).toBe(1)
+			expect(restored[1]).toBe(existing)
+			expect(sibling.Parent).toBe(sharedParent)
+			expect(ServerScriptService:FindFirstChild("Systems")).toBeNil()
+			expect(marker()).toBe(markerBefore)
+			expect(markerBefore:GetAttributes()).toEqual(attributes)
+		end)
+	end
+
+	it("removes a marker it created when rolling back by hand", function()
+		local rbxm, manifest = buildBoth()
+		local ok = pcall(Apply.apply, game, rbxm, manifest, failAt("check"))
+		expect(ok).toBe(false)
+		expect(marker()).toBeNil()
+		expect(sharedParent:FindFirstChild("Systems")).toBeNil()
+	end)
+
+	it("restores nested removals in order when rolling back by hand", function()
+		-- A previous build had a container inside what is now one container.
+		Helpers.folder(sharedParent, "Systems")
+		local inner, innerManifest = Helpers.build({ { path = `{SHARED}/Sub` } }, string.rep("1", 40))
+		Apply.apply(game, inner, innerManifest)
+		local outer = sharedParent:FindFirstChild("Systems") :: Instance
+		local sub = outer:FindFirstChild("Sub") :: Instance
+
+		local rbxm, manifest = Helpers.build({ { path = SHARED } })
+		local ok = pcall(Apply.apply, game, rbxm, manifest, failAt("check"))
+		expect(ok).toBe(false)
+		expect(sub.Parent).toBe(outer)
+		expect(outer.Parent).toBe(sharedParent)
+		expect(#Paths.childrenNamed(sharedParent, "Systems")).toBe(1)
+	end)
+
+	it("says so when it can't roll back by hand", function()
+		local existing = Helpers.folder(sharedParent, "Systems")
+		local rbxm, manifest = buildBoth()
+
+		local ok, err = pcall(Apply.apply, game, rbxm, manifest, {
+			onStep = function(step)
+				if step == "check" then
+					-- Something else destroys the removed container, so it can't go back.
+					existing:Destroy()
+					error("injected failure", 0)
+				end
+			end,
+		})
+		local message = tostring(err)
+		expect(ok).toBe(false)
+		expect(string.sub(message, 1, #Apply.NOT_ROLLED_BACK)).toBe(Apply.NOT_ROLLED_BACK)
+		expect(Apply.rolledBack(message)).toBe(false)
+		expect((string.find(message, "restoring 'Systems'", 1, true))).never.toBeNil()
+		expect((string.find(message, "don't save this place: injected failure", 1, true))).never.toBeNil()
+		-- Everything else was still undone.
+		expect(sharedParent:FindFirstChild("Systems")).toBeNil()
+		expect(ServerScriptService:FindFirstChild("Systems")).toBeNil()
+	end)
+end)
+
+describe("Apply.record", function()
+	-- The build fields `rbxm-publish verify --format json` prints (publish/src/verify.luau);
+	-- publish/tests/verify.test.luau pins the same list on that side.
+	local VERIFY_FIELDS = { "schemaVersion", "commit", "ref", "builtAt", "size", "sha256", "containers" }
+
+	it("records the build and what changed, with verify's build fields", function()
+		Helpers.folder(sharedParent, "Systems")
+		local rbxm, manifest = buildBoth()
+		local record = Apply.record(manifest, Apply.apply(game, rbxm, manifest))
+
+		local keys = {}
+		for key in record do
+			table.insert(keys, key)
+		end
+		table.sort(keys)
+		local expected = table.clone(VERIFY_FIELDS)
+		for _, key in { "applyVersion", "replaced", "added", "removed", "dryRun" } do
+			table.insert(expected, key)
+		end
+		table.sort(expected)
+		expect(keys).toEqual(expected)
+
+		expect(record.applyVersion).toBe(Apply.VERSION)
+		expect(record.schemaVersion).toBe(1)
+		expect(record.commit).toBe(manifest.commit)
+		expect(record.ref).toBe(manifest.ref)
+		expect(record.builtAt).toBe(manifest.builtAt)
+		expect(record.size).toBe(manifest.artifact.size)
+		expect(record.sha256).toBe(manifest.artifact.sha256)
+		expect(record.containers).toEqual(manifest.containers)
+		expect(record.replaced).toEqual({ SHARED })
+		expect(record.added).toEqual({ SERVER })
+		expect(record.removed).toEqual({})
+		expect(record.dryRun).toBe(false)
+	end)
+
+	it("records a dry run", function()
+		local rbxm, manifest = buildBoth()
+		local record = Apply.record(manifest, Apply.apply(game, rbxm, manifest, { dryRun = true }))
+		expect(record.dryRun).toBe(true)
+		expect(record.added).toEqual({ SHARED, SERVER })
+		expect(marker()).toBeNil()
+	end)
 end)

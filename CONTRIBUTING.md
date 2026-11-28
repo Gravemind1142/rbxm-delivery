@@ -28,7 +28,7 @@ Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in th
 | `lute fmt [--check]` | Format all Luau with StyLua |
 | `lute lint-plugin` | Lint rbxm-pull with Selene |
 | `lute typecheck` | Type check rbxm-publish and the task scripts |
-| `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) and the mock tests of rbxm-pull's Apply |
+| `lute tests [-c <case>]` | Run rbxm-publish's tests (needs `rojo`) |
 | `lute build-cli [--out <path>]` | Compile rbxm-publish to `build/rbxm-publish` |
 | `lute build-plugin` | Build rbxm-pull to `build/RbxmPull.rbxm` |
 | `lute install-plugin` | Build rbxm-pull and copy it into Studio's local plugins folder |
@@ -57,14 +57,6 @@ logged in once; `lute ci` runs them there and skips them on Linux. The test tree
 run as a model (`build/rbxm-pull-tests.rbxm`), not a place file, along with a real
 rbxm-publish build of `publish/tests/fixtures/game` for the round-trip tests.
 
-### Mock tests
-
-`pull/mock-tests` runs Apply's source under Lute against a small mock of the engine
-(`Roblox.luau`: instances, attributes, and a JSON stand-in for `.rbxm`), so pull requests
-test applying, refusals and manual rollback on any OS without Studio or Open Cloud. They're
-part of `lute tests`. Behaviour that depends on the real engine
-(deserializing a Rojo build, change history, Team Create) stays in `pull/tests`.
-
 ### In the cloud
 
 `lute pull-tests --cloud` runs the same tests as an
@@ -90,11 +82,11 @@ cloud locally, set the same three environment variables and run `lute pull-tests
 
 ## Before you open a pull request
 
-Run `lute ci`. On Linux the plugin's engine tests are skipped locally (the mock tests still
-run); CI runs them in the cloud on your pull request. If you change Apply, you can also run
+Run `lute ci`. On Linux the plugin's engine tests are skipped locally; CI runs
+them in the cloud on your pull request. If you change Apply, you can also run
 `lute pull-tests` on Windows or macOS.
 
-- Add or update tests for behaviour changes (`publish/tests`, `pull/mock-tests`, `pull/tests`).
+- Add or update tests for behaviour changes (`publish/tests`, `pull/tests`).
 - Update the README or spec when you change how something works.
 - Add a line to the **Unreleased** section of [CHANGELOG.md](CHANGELOG.md) for user-facing
   changes.

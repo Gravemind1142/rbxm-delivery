@@ -133,6 +133,22 @@ test.case("summarizes a build as one line of JSON", function(check)
 	check.eq((json.asArray(summary.containers) :: json.Array)[2], "ServerScriptService/Systems")
 end)
 
+test.case("summarizes exactly the build fields Apply.record records", function(check)
+	-- pull/tests/Apply.spec.luau pins the same list on Apply's side, so a pipeline can compare
+	-- the two outputs field by field.
+	local expected = { "builtAt", "commit", "containers", "ref", "schemaVersion", "sha256", "size" }
+	local m = verify.run({ dir = writeBuild("fields") }).manifest
+	local summary = json.asObject(json.deserialize(verify.summaryJson(m))) :: json.Object
+	local keys = {}
+	for key in summary :: { [any]: any } do
+		if typeof(key) == "string" then -- skip @std/json's own type tag
+			table.insert(keys, key)
+		end
+	end
+	table.sort(keys)
+	check.eq(table.concat(keys, ","), table.concat(expected, ","))
+end)
+
 test.case("the CLI exits 0 for a good build and 1 for a bad one", function(check)
 	local good = writeBuild("cli-good")
 	local result = process.run(
