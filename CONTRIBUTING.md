@@ -43,9 +43,10 @@ Common tasks are Lute scripts in [`.lute/`](.lute), runnable from anywhere in th
 - Task names avoid Lute's built-in commands (`test`, `lint`, `check`, `format`, `compile`,
   ...), which take precedence over `.lute` scripts.
 
-CI ([`ci.yml`](.github/workflows/ci.yml)) runs `lute ci` and the publish Action from this
-checkout on Linux, Windows and macOS, and rbxm-pull's engine tests in the cloud (see
-below).
+CI ([`ci.yml`](.github/workflows/ci.yml)) runs `lute ci` on Linux x86_64, and rbxm-publish's
+tests, compiled binary and the publish Action from this checkout on each platform releases
+ship for (Linux x86_64 and aarch64, macOS aarch64, Windows x86_64). Once those pass, it runs
+rbxm-pull's engine tests in the cloud (see below).
 
 ## Plugin tests
 
