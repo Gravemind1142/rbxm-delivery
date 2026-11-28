@@ -73,7 +73,7 @@ local Apply = {}
 
 -- rbxm-delivery's version, also in pull/pkg.luau. The release workflow refuses a tag that
 -- doesn't match it.
-Apply.VERSION = "0.1.0"
+Apply.VERSION = "0.2.0"
 
 Apply.PROTOCOL = Marker.PROTOCOL
 Apply.Manifest = Manifest

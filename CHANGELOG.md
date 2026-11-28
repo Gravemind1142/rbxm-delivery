@@ -5,6 +5,8 @@ together.
 
 ## Unreleased
 
+## 0.2.0
+
 - **`rbxm-publish verify`** checks a build directory without publishing it (schema version,
   size and SHA-256, optionally the ref), with `--format json` for pipelines
   ([#15](https://github.com/Gravemind1142/rbxm-delivery/issues/15)).

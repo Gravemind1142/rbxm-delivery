@@ -94,10 +94,11 @@ them in the cloud on your pull request. If you change Apply, you can also run
 
 ## Releasing
 
-1. Bump the version in `publish/src/version.luau` and `pull/wally.toml`, move the
-   **Unreleased** notes in [CHANGELOG.md](CHANGELOG.md) under the new version, and merge.
+1. Bump the version in `publish/src/version.luau`, `pull/wally.toml`, `pull/pkg.luau` and
+   `Apply.VERSION` (`lute tests` checks they match), move the **Unreleased** notes in
+   [CHANGELOG.md](CHANGELOG.md) under the new version, and merge.
 2. Tag the merge commit `vX.Y.Z` and push the tag. [`release.yml`](.github/workflows/release.yml)
-   checks the tag matches both versions, compiles rbxm-publish for each platform, builds
+   checks the tag matches every version, compiles rbxm-publish for each platform, builds
    `RbxmPull.rbxm`, and publishes them as a GitHub release.
 
 ## License

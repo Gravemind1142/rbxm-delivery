@@ -220,7 +220,7 @@ Apply.apply(dataModel: DataModel, rbxm: buffer, manifest: Manifest, options: {
 Apply.record(manifest, result): Record -- what was applied, for a deploy report (§7.3)
 Apply.rolledBack(message: string): boolean -- whether a failed apply left the place as it was
 Apply.Manifest.decode(json: string): Manifest -- refuses an unknown schemaVersion
-Apply.VERSION -- the release version, e.g. "0.1.0"
+Apply.VERSION -- the release version, e.g. "0.2.0"
 ```
 
 Everything it needs from the last apply is on the marker, so it never needs an earlier
@@ -315,7 +315,7 @@ return {
             rbxmApply = {
                 sourceKind = "github",
                 source = "https://github.com/Gravemind1142/rbxm-delivery",
-                rev = "v0.1.0",
+                rev = "v0.2.0",
                 target = "pull",
             },
         },

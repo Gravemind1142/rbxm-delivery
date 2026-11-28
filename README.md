@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       # ...your checks...
-      - uses: Gravemind1142/rbxm-delivery/publish@v0.1.0
+      - uses: Gravemind1142/rbxm-delivery/publish@v0.2.0
         with:
           channel: dev-latest
           allowed-refs: refs/heads/main
@@ -91,7 +91,7 @@ macOS (aarch64) and Windows (x86_64), attached to each
 [release](https://github.com/Gravemind1142/rbxm-delivery/releases). It installs with Foreman:
 
 ```toml
-rbxm-publish = { github = "Gravemind1142/rbxm-delivery", version = "=0.1.0" }
+rbxm-publish = { github = "Gravemind1142/rbxm-delivery", version = "=0.2.0" }
 ```
 
 - **Commit and ref** come from `--commit`/`--ref`, else `GITHUB_SHA`/`GITHUB_REF`, else git
@@ -184,7 +184,7 @@ at the release tag that matches your `rbxm-publish`:
 rbxmApply = {
     sourceKind = "github",
     source = "https://github.com/Gravemind1142/rbxm-delivery",
-    rev = "v0.1.0",
+    rev = "v0.2.0",
     target = "pull",
 },
 ```
